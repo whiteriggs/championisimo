@@ -6,14 +6,13 @@ workers_dev = true
 # Clave pública VAPID para Web Push (no es secreta). La privada va como secret:
 #   wrangler secret put VAPID_PRIVATE_KEY
 [vars]
-VAPID_PUBLIC_KEY = "BEtPn4ygVuDfoFqrpX6x-CQp567x4gvUygbTpps9V7I4uZChXl2NadMJbkaeqzHmmXyhezrpAyIrmhvAAP7qeMM"
+VAPID_PUBLIC_KEY = "BG5SczrBmkqc9o6uaIobm3Z8nYCjjo1ZUw5Ht-nHANWWZQpbCqPr0T6-1QIygzfZ9lzdu4jzVj35bup_bvXo_NQ"
 
 # KV para persistir los marcadores consolidados entre peticiones.
-# Hay que crear un namespace NUEVO para esta edición y pegar aquí su id:
-#   wrangler kv namespace create SCORES
+# Namespace propio de esta edición (el de Mundialísimo sigue intacto).
 [[kv_namespaces]]
 binding = "SCORES"
-id = "PENDIENTE"
+id = "c57dd705be9148cf95ea9886a2cf075a"
 
 # La API key NO va aquí. Se guarda como secret:
 #   wrangler secret put FOOTBALL_DATA_KEY
