@@ -12,10 +12,8 @@
 import { initializeApp } from "firebase/app";
 import {
   getFirestore,
-  collection,
   doc,
   getDoc,
-  getDocs,
   setDoc,
 } from "firebase/firestore";
 
@@ -41,20 +39,27 @@ async function main() {
   console.log(`Clonando jugadores groups/${from} → groups/${to} ...`);
 
   const usersSnap = await getDoc(doc(db, "groups", from, "config", "users"));
-  if (usersSnap.exists()) {
-    await setDoc(doc(db, "groups", to, "config", "users"), usersSnap.data());
-    console.log("  ✓ config/users");
-  } else {
-    console.log("  – config/users no existe en el origen, omitido");
+  if (!usersSnap.exists()) {
+    console.log("  – config/users no existe en el origen: nada que clonar");
+    process.exit(0);
   }
+  await setDoc(doc(db, "groups", to, "config", "users"), usersSnap.data());
+  const players = usersSnap.data().list ?? [];
+  console.log(`  ✓ config/users (${players.length} jugadores)`);
 
-  const pwSnap = await getDocs(collection(db, "groups", from, "userPasswords"));
+  // Las reglas prohíben listar userPasswords (evita volcar todos los hashes),
+  // así que se pide cada documento por su id, que es el nombre en minúsculas.
   let n = 0;
-  for (const d of pwSnap.docs) {
-    await setDoc(doc(db, "groups", to, "userPasswords", d.id), d.data());
+  const sinPass = [];
+  for (const player of players) {
+    const id = String(player).toLowerCase();
+    const pw = await getDoc(doc(db, "groups", from, "userPasswords", id));
+    if (!pw.exists()) { sinPass.push(player); continue; }
+    await setDoc(doc(db, "groups", to, "userPasswords", id), pw.data());
     n++;
   }
-  console.log(`  ✓ userPasswords: ${n} documentos`);
+  console.log(`  ✓ userPasswords: ${n} copiados`);
+  if (sinPass.length) console.log(`  – sin contraseña en el origen: ${sinPass.join(", ")}`);
 
   console.log("Listo. Las apuestas y crónicas NO se copian: cada edición empieza en blanco.");
   process.exit(0);
