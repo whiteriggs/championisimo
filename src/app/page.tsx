@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import NavBar from "@/components/NavBar";
-import UfwcChampion from "@/components/UfwcChampion";
+import UfccChampion from "@/components/UfccChampion";
 import NextMatchCountdown from "@/components/NextMatchCountdown";
 import SeasonClosing from "@/components/SeasonClosing";
 import {
@@ -152,7 +152,7 @@ export default function Home() {
             </div>
             {!alreadyIn && (
               <div style={{ marginTop: "1rem" }}>
-                <UfwcChampion />
+                <UfccChampion />
               </div>
             )}
           </div>

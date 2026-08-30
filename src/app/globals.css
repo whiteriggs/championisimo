@@ -3200,7 +3200,7 @@ a {
 }
 
 /* En pantallas estrechas la pill vuelve al flujo normal (fila propia,
-   centrada) para no solaparse con el logo; UFWC se queda a la derecha.
+   centrada) para no solaparse con el logo; UFCC se queda a la derecha.
    Esta regla va DESPUÉS de la base para ganar en la cascada. */
 @media (max-width: 960px) {
   .topbar-extras {

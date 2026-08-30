@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import UfwcChampion from "@/components/UfwcChampion";
+import UfccChampion from "@/components/UfccChampion";
 import NextMatchCountdown from "@/components/NextMatchCountdown";
 import { isGroupAdmin } from "@/lib/group";
 
@@ -214,7 +214,7 @@ export default function NavBar({ user }: { user: string | null }) {
       {mounted && createPortal(overlay, document.body)}
 
       <div className="topbar-extras">
-        <UfwcChampion compact />
+        <UfccChampion compact />
         <NextMatchCountdown compact />
       </div>
     </>

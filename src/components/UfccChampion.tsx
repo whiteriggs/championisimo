@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 
-const UFWC_BASE = "https://whiteriggs.github.io/UFCC";
-const CACHE_KEY = "ufwc.champion";
+const UFCC_BASE = "https://whiteriggs.github.io/UFCC";
+const CACHE_KEY = "ufcc.champion";
 
-type Cached = { name: string; flag: string };
+type Cached = { name: string; crest: string };
 
 function readCache(): Cached | null {
   try {
@@ -16,9 +16,9 @@ function readCache(): Cached | null {
   }
 }
 
-export default function UfwcChampion({ compact = false }: { compact?: boolean }) {
+export default function UfccChampion({ compact = false }: { compact?: boolean }) {
   const [name, setName] = useState<string | null>(null);
-  const [flag, setFlag] = useState("🏆");
+  const [crest, setCrest] = useState("");
 
   // Render the last known champion immediately so the pill never blanks out
   // across navigations if a single cross-origin fetch fails on mobile.
@@ -26,24 +26,26 @@ export default function UfwcChampion({ compact = false }: { compact?: boolean })
     const cached = readCache();
     if (cached) {
       setName(cached.name);
-      setFlag(cached.flag);
+      setCrest(cached.crest);
     }
   }, []);
 
   useEffect(() => {
     let alive = true;
     Promise.all([
-      fetch(`${UFWC_BASE}/data-ufwc/stats.json`, { cache: "no-store" }).then((r) => r.json()),
-      fetch(`${UFWC_BASE}/data-ufwc/clubs.json`, { cache: "no-store" }).then((r) => r.json()),
+      fetch(`${UFCC_BASE}/data/stats.json`, { cache: "no-store" }).then((r) => r.json()),
+      fetch(`${UFCC_BASE}/data/clubs.json`, { cache: "no-store" }).then((r) => r.json()),
     ])
       .then(([stats, clubs]) => {
         if (!alive) return;
         const champ: string = stats.current_champion;
-        const champFlag: string = clubs[champ] || "🏆";
+        // En modo clubes el mapa da el nombre del fichero del escudo, no un emoji.
+        const file: string | undefined = clubs[champ];
+        const champCrest = file ? `${UFCC_BASE}/crests/${file}` : "";
         setName(champ);
-        setFlag(champFlag);
+        setCrest(champCrest);
         try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify({ name: champ, flag: champFlag }));
+          localStorage.setItem(CACHE_KEY, JSON.stringify({ name: champ, crest: champCrest }));
         } catch {
           /* almacenamiento no disponible — ignoramos */
         }
@@ -60,10 +62,10 @@ export default function UfwcChampion({ compact = false }: { compact?: boolean })
 
   return (
     <a
-      href={`${UFWC_BASE}/?mode=nations`}
+      href={`${UFCC_BASE}/?mode=clubs`}
       target="_blank"
       rel="noopener noreferrer"
-      title="Campeón actual del Unofficial Football World Championship — abre la web"
+      title="Campeón actual del Unofficial Football Club Championship — abre la web"
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -82,9 +84,20 @@ export default function UfwcChampion({ compact = false }: { compact?: boolean })
       }}
     >
       <span style={{ color: "var(--text-dim)", fontSize: compact ? "0.72rem" : "0.8rem" }}>
-        {compact ? "UFWC" : "Campeón UFWC"}
+        {compact ? "UFCC" : "Campeón UFCC"}
       </span>
-      <span style={{ fontSize: compact ? "1.05rem" : "1.25rem" }}>{flag}</span>
+      {crest ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={crest}
+          alt=""
+          width={compact ? 16 : 20}
+          height={compact ? 16 : 20}
+          style={{ objectFit: "contain", flexShrink: 0 }}
+        />
+      ) : (
+        <span style={{ fontSize: compact ? "1.05rem" : "1.25rem" }}>🏆</span>
+      )}
       <span style={{ fontWeight: 600 }}>{name}</span>
       <span style={{ color: "var(--accent)", fontSize: compact ? "0.72rem" : "0.8rem" }}>↗</span>
     </a>
