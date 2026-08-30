@@ -1,0 +1,19 @@
+name = "championisimo-live"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+workers_dev = true
+
+# Clave pública VAPID para Web Push (no es secreta). La privada va como secret:
+#   wrangler secret put VAPID_PRIVATE_KEY
+[vars]
+VAPID_PUBLIC_KEY = "BEtPn4ygVuDfoFqrpX6x-CQp567x4gvUygbTpps9V7I4uZChXl2NadMJbkaeqzHmmXyhezrpAyIrmhvAAP7qeMM"
+
+# KV para persistir los marcadores consolidados entre peticiones.
+# Hay que crear un namespace NUEVO para esta edición y pegar aquí su id:
+#   wrangler kv namespace create SCORES
+[[kv_namespaces]]
+binding = "SCORES"
+id = "PENDIENTE"
+
+# La API key NO va aquí. Se guarda como secret:
+#   wrangler secret put FOOTBALL_DATA_KEY

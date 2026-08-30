@@ -1,0 +1,834 @@
+"use client";
+
+import NavBar from "@/components/NavBar";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { getDoc, setDoc, collection, getDocs } from "firebase/firestore";
+import { generateText } from "@/lib/gemini";
+import { fetchAllMatches } from "@/lib/football-api";
+import NewspaperChronicle from "@/components/NewspaperChronicle";
+import { parseChronicle } from "@/lib/chronicle";
+import { announceChronicle } from "@/lib/chat";
+import { Match, buildTeamTotals, calcUserScore } from "@/lib/scoring";
+import { db } from "@/lib/firebase";
+import { groupDoc, groupCollection } from "@/lib/db";
+import { getGroupConfig, isGroupAdmin } from "@/lib/group";
+import { probeQuotaExceeded, nextQuotaResetMs } from "@/lib/fsread";
+import {
+  getStoredUser,
+  clearUser,
+  getUsers,
+  addUser,
+  removeUser,
+  deleteUserPassword,
+} from "@/lib/auth";
+import { TEAMS, POTS } from "@/lib/teams";
+
+// ─── Bet logic (same as /apuesta) ──────────────────────────────
+const favoriteBounds  = { min: 6, max: 9 };
+const antiBounds      = { min: 3, max: 5 };
+const ticketBounds    = { min: 12, max: 18 };
+const MAX_FAV_PER_POT  = 3;
+const MAX_ANTI_PER_POT = 2;
+const POT_NUMBERS     = [1, 2, 3, 4];
+
+function potOf(id: string) {
+  return TEAMS.find((t) => t.id === id)?.pot ?? 0;
+}
+
+function countInPot(ids: string[], pot: number) {
+  return ids.filter((id) => potOf(id) === pot).length;
+}
+
+function exceedsPotLimit(ids: string[], max: number) {
+  return POT_NUMBERS.some((p) => countInPot(ids, p) > max);
+}
+
+type Tab = "usuarios" | "contrasenas" | "apuestas" | "cronica" | "premio";
+
+export default function AdminPage() {
+  const router = useRouter();
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("usuarios");
+
+  // ── Usuarios state ────────────────────────────────────────────
+  const [userList, setUserList]       = useState<string[]>([]);
+  const [newUser, setNewUser]         = useState("");
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [usersMsg, setUsersMsg]       = useState<string | null>(null);
+
+  // ── Contraseñas state ─────────────────────────────────────────
+  const [pwUser, setPwUser]           = useState("");
+  const [pwMsg, setPwMsg]             = useState<string | null>(null);
+  const [pwBusy, setPwBusy]           = useState(false);
+
+  // ── Apuestas state ────────────────────────────────────────────
+  const [betUser, setBetUser]         = useState("");
+  const [favorites, setFavorites]     = useState<string[]>([]);
+  const [antiFavorites, setAntiFavorites] = useState<string[]>([]);
+  const [superFavorite, setSuperFavorite] = useState<string | null>(null);
+  const [confirmed, setConfirmed]     = useState(false);
+  const [betLoading, setBetLoading]   = useState(false);
+  const [betSaving, setBetSaving]     = useState(false);
+  const [betMsg, setBetMsg]           = useState<string | null>(null);
+  const [betLoaded, setBetLoaded]     = useState(false);
+
+  // ── Crónica IA state ──────────────────────────────────────────
+  const [chronicleGenerating, setChronicleGenerating] = useState(false);
+  const [chronicleMsg, setChronicleMsg]               = useState<string | null>(null);
+  const [chronicleContext, setChronicleContext]        = useState("");
+  const [chroniclePreview, setChroniclePreview]        = useState<string | null>(null);
+  const [chroniclePublishing, setChroniclePublishing]  = useState(false);
+  const [chronicleLeaderboard, setChronicleLeaderboard] = useState<{ user: string; total: number; confirmed: boolean }[]>([]);
+
+  // ── Premio especial (Estadísticas) state ──────────────────────
+  const [specialWinner, setSpecialWinner] = useState("");
+  const [specialBlurb, setSpecialBlurb]   = useState("");
+  const [specialSaving, setSpecialSaving] = useState(false);
+  const [specialMsg, setSpecialMsg]       = useState<string | null>(null);
+  const [specialLoaded, setSpecialLoaded] = useState(false);
+
+  // ── Auth guard ────────────────────────────────────────────────
+  useEffect(() => {
+    const user = getStoredUser();
+    if (!user) { router.push("/login"); return; }
+    if (!isGroupAdmin(user)) { router.push("/apuesta"); return; }
+    setCurrentUser(user);
+    loadUsers();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
+
+  // ── Detección de cuota Firestore agotada (429) ────────────────
+  // Sondea una lectura ligera por el Worker cada 30s; si devuelve 429 se marca
+  // y mostramos un aviso. `quotaActive` = hubo un 429 en los últimos 5 min.
+  const [quotaActive, setQuotaActive] = useState(false);
+  const [quotaCountdown, setQuotaCountdown] = useState("");
+  useEffect(() => {
+    let alive = true;
+    const check = async () => {
+      const down = await probeQuotaExceeded();
+      if (alive) setQuotaActive(down);
+    };
+    check();
+    const id = setInterval(check, 30_000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  // Contador descendente hasta el próximo reinicio de cuota (medianoche Pacífico).
+  useEffect(() => {
+    if (!quotaActive) return;
+    const tick = () => {
+      const ms = nextQuotaResetMs() - Date.now();
+      if (ms <= 0) { setQuotaCountdown("ahora mismo"); return; }
+      const h = Math.floor(ms / 3_600_000);
+      const m = Math.floor((ms % 3_600_000) / 60_000);
+      const s = Math.floor((ms % 60_000) / 1000);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      setQuotaCountdown(`${pad(h)}:${pad(m)}:${pad(s)}`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [quotaActive]);
+
+  // ── Premio especial: cargar al abrir la pestaña y guardar ─────
+  useEffect(() => {
+    if (tab !== "premio" || specialLoaded) return;
+    getDoc(groupDoc("config", "specialAward"))
+      .then((snap) => {
+        const d = snap.data() as { winner?: string; blurb?: string } | undefined;
+        if (d) { setSpecialWinner(d.winner ?? ""); setSpecialBlurb(d.blurb ?? ""); }
+      })
+      .catch(() => {})
+      .finally(() => setSpecialLoaded(true));
+  }, [tab, specialLoaded]);
+
+  async function handleSaveSpecial() {
+    setSpecialSaving(true);
+    setSpecialMsg(null);
+    try {
+      await setDoc(groupDoc("config", "specialAward"), {
+        winner: specialWinner.trim(),
+        blurb: specialBlurb.trim(),
+      });
+      setSpecialMsg("Premio guardado ✓");
+    } catch {
+      setSpecialMsg("No se pudo guardar.");
+    } finally {
+      setSpecialSaving(false);
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────
+  async function loadUsers() {
+    setUsersLoading(true);
+    try {
+      setUserList(await getUsers());
+    } finally {
+      setUsersLoading(false);
+    }
+  }
+
+  async function handleAddUser(e: React.FormEvent) {
+    e.preventDefault();
+    const name = newUser.trim();
+    if (!name) return;
+    try {
+      await addUser(name);
+      setNewUser("");
+      setUsersMsg(`${name} añadido.`);
+      await loadUsers();
+    } catch {
+      setUsersMsg("Error al añadir.");
+    }
+    setTimeout(() => setUsersMsg(null), 3000);
+  }
+
+  async function handleRemoveUser(username: string) {
+    if (!confirm(`¿Eliminar a ${username} de la lista de usuarios?`)) return;
+    try {
+      await removeUser(username);
+      setUsersMsg(`${username} eliminado.`);
+      await loadUsers();
+    } catch {
+      setUsersMsg("Error al eliminar.");
+    }
+    setTimeout(() => setUsersMsg(null), 3000);
+  }
+
+  async function handleResetPassword() {
+    if (!pwUser) return;
+    if (!confirm(`¿Resetear la contraseña de ${pwUser}? Tendrá que crear una nueva al entrar.`)) return;
+    setPwBusy(true);
+    setPwMsg(null);
+    try {
+      await deleteUserPassword(pwUser);
+      setPwMsg(`Contraseña de ${pwUser} eliminada.`);
+    } catch {
+      setPwMsg("Error al resetear.");
+    } finally {
+      setPwBusy(false);
+    }
+    setTimeout(() => setPwMsg(null), 4000);
+  }
+
+  async function handleLoadBet() {
+    if (!betUser) return;
+    setBetLoading(true);
+    setBetMsg(null);
+    setBetLoaded(false);
+    try {
+      const snap = await getDoc(groupDoc("bets", betUser.toLowerCase()));
+      if (snap.exists()) {
+        const data = snap.data();
+        setFavorites(data.favorites ?? []);
+        setAntiFavorites(data.antiFavorites ?? []);
+        setSuperFavorite(data.superFavorite ?? null);
+        setConfirmed(data.confirmed ?? false);
+      } else {
+        setFavorites([]);
+        setAntiFavorites([]);
+        setSuperFavorite(null);
+        setConfirmed(false);
+      }
+      setBetLoaded(true);
+    } catch {
+      setBetMsg("Error al cargar la apuesta.");
+    } finally {
+      setBetLoading(false);
+    }
+  }
+
+  async function handleSaveBet() {
+    if (!betUser || !allValidBet) return;
+    setBetSaving(true);
+    setBetMsg(null);
+    try {
+      await setDoc(groupDoc("bets", betUser.toLowerCase()), {
+        favorites,
+        antiFavorites,
+        superFavorite: superFavorite ?? null,
+        confirmed: true,
+        updatedAt: new Date(),
+      });
+      setConfirmed(true);
+      setBetMsg(`Apuesta de ${betUser} guardada y confirmada.`);
+    } catch {
+      setBetMsg("Error al guardar.");
+    } finally {
+      setBetSaving(false);
+    }
+    setTimeout(() => setBetMsg(null), 4000);
+  }
+
+  async function handleResetBet() {
+    if (!betUser) return;
+    if (!confirm(`¿Resetear la apuesta de ${betUser}? Se guardará vacía.`)) return;
+    setBetSaving(true);
+    setBetMsg(null);
+    try {
+      await setDoc(groupDoc("bets", betUser.toLowerCase()), {
+        favorites: [],
+        antiFavorites: [],
+        superFavorite: null,
+        confirmed: false,
+        updatedAt: new Date(),
+      });
+      setFavorites([]);
+      setAntiFavorites([]);
+      setSuperFavorite(null);
+      setConfirmed(false);
+      setBetMsg(`Apuesta de ${betUser} reseteada.`);
+    } catch {
+      setBetMsg("Error al resetear.");
+      setBetSaving(false);
+    }
+    setTimeout(() => setBetMsg(null), 4000);
+  }
+
+  function buildChroniclePrompt(
+    allBets: Record<string, { favorites: string[]; antiFavorites: string[]; superFavorite: string | null }>,
+    jornadaMatches: Match[],
+    leaderboard: { uname: string; score: number }[],
+    prevChronicles: string[] = [],
+    extraContext = ""
+  ): string {
+    const betsInfo = Object.entries(allBets).map(([uname, data]) => {
+      const sfTeam  = data.superFavorite ? TEAMS.find(t => t.id === data.superFavorite) : null;
+      const favNames  = data.favorites.map(id => TEAMS.find(t => t.id === id)?.name ?? id).join(", ");
+      const antiNames = data.antiFavorites.map(id => TEAMS.find(t => t.id === id)?.name ?? id).join(", ");
+      return `${uname}:\n  Favoritos: ${favNames || "ninguno"}\n  Antifavoritos: ${antiNames || "ninguno"}\n  Superfavorito: ${sfTeam ? sfTeam.name : "ninguno"}`;
+    }).join("\n\n");
+    const matchesInfo = jornadaMatches.length === 0
+      ? "No se han jugado partidos en esta jornada."
+      : jornadaMatches.map(m =>
+          `${m.home} ${m.homeGoals}-${m.awayGoals} ${m.away}${m.penalties ? " (pen.)" : ""}`
+        ).join("\n");
+    // Build team → participants lookup
+    const teamOwners: Record<string, { favs: string[]; antis: string[] }> = {};
+    Object.entries(allBets).forEach(([uname, data]) => {
+      data.favorites.forEach(id => {
+        const name = TEAMS.find(t => t.id === id)?.name ?? id;
+        if (!teamOwners[name]) teamOwners[name] = { favs: [], antis: [] };
+        teamOwners[name].favs.push(uname);
+      });
+      data.antiFavorites.forEach(id => {
+        const name = TEAMS.find(t => t.id === id)?.name ?? id;
+        if (!teamOwners[name]) teamOwners[name] = { favs: [], antis: [] };
+        teamOwners[name].antis.push(uname);
+      });
+    });
+    const teamOwnersInfo = Object.entries(teamOwners)
+      .map(([team, o]) => {
+        const parts = [];
+        if (o.favs.length) parts.push(`favorito de: ${o.favs.join(", ")}`);
+        if (o.antis.length) parts.push(`antifavorito de: ${o.antis.join(", ")}`);
+        return `  ${team} → ${parts.join(" | ")}`;
+      }).join("\n");
+    const leaderboardInfo = leaderboard.length === 0
+      ? "Sin partidos jugados aún, todos a 0 puntos."
+      : leaderboard.map((e, i) => `  ${i + 1}. ${e.uname}: ${e.score} pts`).join("\n");
+    const prevInfo = prevChronicles.length === 0
+      ? "(ninguna todavía)"
+      : prevChronicles
+          // Quitamos la vieja sección RANKING de las crónicas previas: si LaIA la
+          // ve en los ejemplos, imita ese formato de lista uno-por-uno que ya no
+          // queremos. Solo le pasamos titular + entradilla + cuerpo.
+          .map((c) => c.replace(/^\s*RANKING\s*:[\s\S]*$/im, "").trim())
+          .map((c, i) => `--- Crónica ${i + 1} (más reciente primero) ---\n${c}`)
+          .join("\n\n");
+    return `Eres «LaIA», la reportera más gamberra y espontánea de la Porra de la Champions 26-27. Escribes en primera persona, como quien suelta un audio largo al grupo de WhatsApp: con chispa, mala leche cariñosa y cero corrección política (pero sin palabrotas ni crueldad real). NO suenas a plantilla: cada crónica es distinta, improvisada, con la energía de lo que ha pasado HOY.
+
+QUÉ COMENTAS: solo los partidos FINALIZADOS de "PARTIDOS DE LA JORNADA". No inventes resultados ni menciones partidos que no estén en esa lista.
+
+CÓMO ENFOCARLO (lo más importante):
+- NO hagas un repaso de todos los participantes uno por uno. Eso es aburrido y predecible.
+- Céntrate en lo jugoso de hoy: quién se ha pegado el BATACAZO (un favorito suyo que ha perdido, o un antifavorito suyo que ha ganado) y quién ha CLAVADO la apuesta. Menciona a esos por nombre y cébate o felicítales con gracia.
+- Mete también alguna pulla a los que HOY NO han puntuado o se han quedado a cero (ninguno de sus equipos jugaba, o jugaron y no rascaron): ese «día de descanso forzoso», el que mira la jornada de reojo sin mojarse, el que sigue plantado en su sitio sin pena ni gloria. Una o dos coñas de esas, sin nombrar a todos.
+- Escribe suelto y espontáneo: un par de párrafos seguidos, sin secciones ni listas. Que parezca que improvisas, no que rellenas un formulario.
+- Si la jornada ha sido sosa, dilo con sorna; no fuerces drama donde no lo hay.
+
+SOBRE LA GENTE (trasfondo, NO guion): conoces las manías de cada uno, pero son SOLO para pillar el tono, NO para soltarlas en cada crónica. Úsalas con MUCHÍSima moderación —como mucho UNA por crónica, y solo si encaja de forma natural y graciosa con lo que ha pasado hoy—. Si ya las has usado en crónicas anteriores, NO las repitas: busca ángulos nuevos.
+- Esteban: tardón crónico. · Jorge: dice que curra de noche y se piva al pueblo. · Juan: promete venir y deja tirado. · Manuel: un Willy Fog que presume de ocupadísimo. · Jordi: madruga para la bici. · Javi: gadgets y su perro Riggs. · Capde: corre, bici y trabaja sin parar. · Iris: profe y ahora directora. · Ester: de Zarza, melena corta, ex-basket. · JuanRa: curra sin parar, aparece poco. · Sebas: argentino despistado. · Adri y Mariona: deportistas; con ellos SÉ SUAVE (bromas cariñosas, nada de sarcasmo duro, NO menciones su edad).
+
+CRÓNICAS ANTERIORES (para NO repetirte): NO reutilices los mismos chistes, coletillas, recursos ni las mismas bromas sobre las manías de la gente que ya aparecen aquí. Si ayer bromeaste con la bici de Jordi, hoy ni la menciones. Sé original respecto a esto:
+${prevInfo}
+
+REGLAS DE LA PORRA (para no liar conceptos): cada uno elige FAVORITOS y ANTIFAVORITOS. Acertar = que tus favoritos ganen y tus antifavoritos pierdan. Lo más ridículo: un favorito fuerte que cae, o un antifavorito que acaba ganando. Los números entre paréntesis de las apuestas (ej. España(4)) son el VALOR/coste del equipo (1-4), NO puntos de torneo.
+
+DATOS DE ESTA JORNADA:
+QUIÉN TIENE CADA EQUIPO:\n${teamOwnersInfo}\n\nAPUESTAS DE CADA UNO:\n${betsInfo}\n\nCLASIFICACIÓN ACTUAL:\n${leaderboardInfo}\n\nPARTIDOS FINALIZADOS HOY:\n${matchesInfo}
+
+DEVUELVE EXACTAMENTE ESTE FORMATO (sin markdown, sin asteriscos, sin almohadillas, sin negritas, sin nada antes ni después). Las etiquetas van en MAYÚSCULAS al inicio de línea y el texto va justo DESPUÉS de los dos puntos, en la MISMA línea (no en la siguiente):
+
+TITULAR: [titular de portada gracioso y con gancho sobre lo más jugoso de hoy. Máx. 12 palabras. Que NO se parezca a los titulares de las crónicas anteriores.]
+ENTRADILLA: [una sola frase de subtítulo, irónica.]
+CRONICA:
+[2 o 3 párrafos sueltos y espontáneos. Comenta los partidos de hoy y, dentro del propio relato, nombra a los que se han pegado el batacazo o han clavado, y suelta alguna pulla a los que hoy no han puntuado. PROHIBIDO hacer una lista o ranking numerado de participantes; va todo en prosa corrida.]
+
+PROHIBIDO POR DEFECTO (salvo que las INDICACIONES DEL EDITOR lo pidan expresamente): NO incluyas una sección RANKING, VEREDICTO, ni ninguna lista numerada con los participantes uno por uno. Por defecto va todo en prosa corrida con solo las tres etiquetas TITULAR, ENTRADILLA y CRONICA. NO uses asteriscos ni almohadillas.
+
+(Solo si el editor pide expresamente un ranking/repaso de todos: añade AL FINAL una sección con la etiqueta RANKING: y, debajo, una línea por participante con el formato EXACTO "posición | Nombre | comentario", usando la barra vertical solo ahí.)${extraContext ? `\n\nINDICACIONES DEL EDITOR (PRIORITARIAS — tenlas MUY en cuenta e intégralas sí o sí en la crónica de hoy, con tu estilo; si piden mencionar a alguien o algo concreto, hazlo; si piden un ranking o repaso de todos, entonces SÍ inclúyelo):\n${extraContext}` : ""}`;
+  }
+
+  async function handleGenerateChronicle() {
+    if (!confirm("Generar nueva crónica con IA. Puede tardar 10-20 segundos.")) return;
+    setChronicleGenerating(true);
+    setChronicleMsg(null);
+    try {
+      const users = await getUsers();
+      const allBets: Record<string, { favorites: string[]; antiFavorites: string[]; superFavorite: string | null; confirmed: boolean }> = {};
+      for (const u of users) {
+        const snap = await getDoc(groupDoc("bets", u.toLowerCase()));
+        if (!snap.exists()) continue;
+        const data = snap.data() as { favorites?: string[]; antiFavorites?: string[]; superFavorite?: string | null; confirmed?: boolean };
+        allBets[u] = { favorites: data.favorites ?? [], antiFavorites: data.antiFavorites ?? [], superFavorite: data.superFavorite ?? null, confirmed: data.confirmed ?? false };
+      }
+
+      // Jornada = partidos finalizados cuyo inicio (utcDate) cae dentro de las
+      // últimas 24h. Cada partido trae su hora de inicio, así que comparamos con
+      // (ahora − 24h). Los manuales del admin se incluyen siempre (curados).
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+      const playedMatches: Match[] = [];
+      const apiPlayed: { match: Match; start: number }[] = [];
+      try {
+        const apiMatches = await fetchAllMatches();
+        apiMatches.filter(m => m.played).forEach(m => {
+          const match: Match = { id: m.id, home: m.home, away: m.away, homeGoals: m.homeGoals ?? 0, awayGoals: m.awayGoals ?? 0, phase: m.phase, penalties: m.penalties ?? false, played: true };
+          playedMatches.push(match);
+          apiPlayed.push({ match, start: new Date(m.utcDate).getTime() });
+        });
+      } catch { /* API unavailable, continue */ }
+      const manualPlayed: Match[] = [];
+      const manualSnap = await getDocs(collection(db, "matches"));
+      manualSnap.docs.forEach(d => {
+        const data = d.data() as Omit<Match, "id">;
+        if (data.played) {
+          const match: Match = { id: d.id, ...data };
+          playedMatches.push(match);
+          manualPlayed.push(match);
+        }
+      });
+
+      const jornadaMatches: Match[] = [
+        ...apiPlayed.filter(x => x.start >= cutoff).map(x => x.match),
+        ...manualPlayed,
+      ];
+
+      // Clasificación acumulada de la porra (con TODOS los partidos jugados).
+      const teamTotals = buildTeamTotals(playedMatches);
+      const leaderboard = Object.entries(allBets)
+        .map(([uname, data]) => ({
+          uname,
+          score: calcUserScore(data.favorites, data.antiFavorites, teamTotals),
+        }))
+        .sort((a, b) => b.score - a.score);
+
+      // Tabla que se guardará junto a la crónica (incluye TODOS los usuarios y su
+      // estado confirmado, igual que la página de Clasificación).
+      const fullBoard = users
+        .map((u) => {
+          const bet = allBets[u];
+          const confirmed = bet?.confirmed ?? false;
+          const total = bet && confirmed ? calcUserScore(bet.favorites, bet.antiFavorites, teamTotals) : 0;
+          return { user: u, total, confirmed };
+        })
+        .sort((a, b) => b.total - a.total);
+      setChronicleLeaderboard(fullBoard);
+
+      // Crónicas anteriores (memoria anti-repetición): las 3 más recientes.
+      let prevChronicles: string[] = [];
+      try {
+        const chSnap = await getDocs(groupCollection("chronicles"));
+        prevChronicles = chSnap.docs
+          .filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d.id))
+          .sort((a, b) => b.id.localeCompare(a.id))
+          .slice(0, 3)
+          .map(d => (d.data() as { text?: string }).text ?? "")
+          .filter(Boolean);
+      } catch { /* sin histórico, continuar */ }
+
+      const prompt = buildChroniclePrompt(allBets, jornadaMatches, leaderboard, prevChronicles, chronicleContext.trim());
+      const text = await generateText(prompt);
+      setChroniclePreview(text);
+      setChronicleMsg("Crónica generada correctamente.");
+    } catch (e) {
+      setChronicleMsg(`Error: ${String(e)}`);
+    } finally {
+      setChronicleGenerating(false);
+    }
+  }
+
+  async function handlePublishChronicle() {
+    if (!chroniclePreview) return;
+    setChroniclePublishing(true);
+    try {
+      const dateKey = new Date().toISOString().slice(0, 10);
+      await setDoc(groupDoc("chronicles", dateKey), { text: chroniclePreview, leaderboard: chronicleLeaderboard, generatedAt: new Date(), generatedBy: currentUser ?? getGroupConfig().admin });
+      try {
+        await announceChronicle(parseChronicle(chroniclePreview)?.headline ?? "");
+      } catch { /* el aviso en el chat es secundario; no bloquea la publicación */ }
+      setChronicleMsg("✓ Crónica publicada. Ya visible en /cronica.");
+      setChroniclePreview(null);
+    } catch (e) {
+      setChronicleMsg(`Error al publicar: ${String(e)}`);
+    } finally {
+      setChroniclePublishing(false);
+    }
+  }
+
+  function toggleTeam(teamId: string, isFavorite: boolean) {
+    if (isFavorite) {
+      setFavorites((c) => c.includes(teamId) ? c.filter((id) => id !== teamId) : [...c, teamId]);
+    } else {
+      setAntiFavorites((c) => c.includes(teamId) ? c.filter((id) => id !== teamId) : [...c, teamId]);
+    }
+  }
+
+  function potFull(pot: number, isFavorite: boolean) {
+    return isFavorite
+      ? countInPot(favorites, pot) >= MAX_FAV_PER_POT
+      : countInPot(antiFavorites, pot) >= MAX_ANTI_PER_POT;
+  }
+
+  const favoritesCost  = useMemo(() => favorites.reduce((s, id) => s + (TEAMS.find((t) => t.id === id)?.price ?? 0), 0), [favorites]);
+  const antiDiscount   = useMemo(() => antiFavorites.reduce((s, id) => s + (TEAMS.find((t) => t.id === id)?.price ?? 0), 0), [antiFavorites]);
+  const ticketCost     = favoritesCost - antiDiscount;
+  const overlap        = favorites.some((id) => antiFavorites.includes(id));
+
+  const validationsBet = [
+    { ok: favorites.length >= favoriteBounds.min && favorites.length <= favoriteBounds.max, text: `Favoritos: ${favoriteBounds.min}-${favoriteBounds.max} (actual ${favorites.length})` },
+    { ok: antiFavorites.length >= antiBounds.min && antiFavorites.length <= antiBounds.max, text: `Antifavoritos: ${antiBounds.min}-${antiBounds.max} (actual ${antiFavorites.length})` },
+    { ok: !exceedsPotLimit(favorites, MAX_FAV_PER_POT), text: `Máximo ${MAX_FAV_PER_POT} favoritos por bombo` },
+    { ok: !exceedsPotLimit(antiFavorites, MAX_ANTI_PER_POT), text: `Máximo ${MAX_ANTI_PER_POT} antifavoritos por bombo` },
+    { ok: !overlap, text: "Un equipo no puede estar en ambos bloques" },
+    { ok: ticketCost >= ticketBounds.min && ticketCost <= ticketBounds.max, text: `Coste entre ${ticketBounds.min} y ${ticketBounds.max} pts (actual ${ticketCost} pts)` },
+    { ok: superFavorite !== null, text: "Marca un favorito como campeón (★)" },
+  ];
+  const allValidBet = validationsBet.every((r) => r.ok);
+
+  function handleLogout() {
+    clearUser();
+    router.push("/login");
+  }
+
+  if (!currentUser) return null;
+
+  return (
+    <main className="app-shell">
+      <header className="topbar">
+        <div className="brand">
+          <span className="dot" />
+          <h1>Championisimo</h1>
+          <span className="sub">{currentUser}</span>
+        </div>
+        <NavBar user={currentUser} />
+        <button className="mini-action" onClick={handleLogout}>Cerrar sesión</button>
+      </header>
+
+      <section className="hero">
+        <div className="hero-inner">
+          <div className="hero-crest placeholder">⚙</div>
+          <div className="hero-text">
+            <div className="hero-eyebrow">Panel de administración</div>
+            <h2 className="hero-name">Admin</h2>
+            <p className="lead">Gestión de usuarios, contraseñas y apuestas.</p>
+          </div>
+        </div>
+      </section>
+
+      {quotaActive && (
+        <div className="admin-container">
+          <div className="quota-alert" role="alert">
+            <span className="quota-alert-icon">⚠️</span>
+            <div>
+              <strong>Cuota de Firestore agotada (error 429).</strong>
+              <span> La app está sirviendo los últimos datos guardados; la clasificación y crónicas no se actualizan hasta que la cuota se reinicie. Los partidos en vivo y el chat siguen funcionando.</span>
+              {quotaCountdown && (
+                <div className="quota-countdown">
+                  Se reinicia en <strong>{quotaCountdown}</strong> (medianoche hora del Pacífico)
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="admin-container">
+        {/* Tabs */}
+        <div className="admin-tabs">
+          <button className={`admin-tab ${tab === "usuarios" ? "active" : ""}`} onClick={() => setTab("usuarios")}>Usuarios</button>
+          <button className={`admin-tab ${tab === "contrasenas" ? "active" : ""}`} onClick={() => setTab("contrasenas")}>Contraseñas</button>
+          <button className={`admin-tab ${tab === "apuestas" ? "active" : ""}`} onClick={() => setTab("apuestas")}>Apuestas</button>
+          <button className={`admin-tab ${tab === "cronica" ? "active" : ""}`} onClick={() => setTab("cronica")}>Crónica IA</button>
+          <button className={`admin-tab ${tab === "premio" ? "active" : ""}`} onClick={() => setTab("premio")}>Premio 😤</button>
+        </div>
+
+        {/* ── TAB: Usuarios ─────────────────────────────────────── */}
+        {tab === "usuarios" && (
+          <div className="admin-panel card">
+            <h2>Gestión de usuarios</h2>
+            {usersMsg && <p className="admin-msg">{usersMsg}</p>}
+            {usersLoading ? (
+              <p className="muted">Cargando…</p>
+            ) : (
+              <ul className="admin-user-list">
+                {userList.map((u) => (
+                  <li key={u} className="admin-user-item">
+                    <span>{u}</span>
+                    {u !== "Javi" && (
+                      <button className="admin-remove-btn" onClick={() => handleRemoveUser(u)}>Eliminar</button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form className="admin-add-form" onSubmit={handleAddUser}>
+              <input
+                type="text"
+                value={newUser}
+                onChange={(e) => setNewUser(e.target.value)}
+                placeholder="Nombre del nuevo usuario"
+                className="admin-input"
+              />
+              <button className="btn" type="submit">Añadir</button>
+            </form>
+          </div>
+        )}
+
+        {/* ── TAB: Contraseñas ──────────────────────────────────── */}
+        {tab === "contrasenas" && (
+          <div className="admin-panel card">
+            <h2>Resetear contraseña</h2>
+            <p className="muted">El usuario tendrá que crear una nueva contraseña la próxima vez que entre.</p>
+            {pwMsg && <p className="admin-msg">{pwMsg}</p>}
+            <div className="admin-row">
+              <select className="admin-select" value={pwUser} onChange={(e) => setPwUser(e.target.value)}>
+                <option value="">— Selecciona usuario —</option>
+                {userList.map((u) => (
+                  <option key={u} value={u}>{u}</option>
+                ))}
+              </select>
+              <button className="btn admin-danger-btn" onClick={handleResetPassword} disabled={!pwUser || pwBusy}>
+                {pwBusy ? "Reseteando…" : "Resetear contraseña"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB: Apuestas ─────────────────────────────────────── */}
+        {tab === "apuestas" && (
+          <div className="admin-panel card">
+            <h2>Editar apuesta</h2>
+
+            <div className="admin-row">
+              <select className="admin-select" value={betUser} onChange={(e) => { setBetUser(e.target.value); setBetLoaded(false); setBetMsg(null); }}>
+                <option value="">— Selecciona usuario —</option>
+                {userList.map((u) => (
+                  <option key={u} value={u}>{u}</option>
+                ))}
+              </select>
+              <button className="btn" onClick={handleLoadBet} disabled={!betUser || betLoading}>
+                {betLoading ? "Cargando…" : "Cargar apuesta"}
+              </button>
+            </div>
+
+            {betMsg && <p className="admin-msg">{betMsg}</p>}
+
+            {betLoaded && (
+              <>
+                <div className={`price-bar ${allValidBet ? "price-ok" : ticketCost > ticketBounds.max ? "price-over" : "price-under"}`} style={{ margin: "1rem 0", borderRadius: "8px" }}>
+                  <div className="price-bar-inner">
+                    <span className="price-bar-total">
+                      <span className="price-bar-label">Apuesta de {betUser}</span>
+                      <span className="price-bar-amount">{ticketCost} pts</span>
+                    </span>
+                    <span className="price-bar-range">rango válido: {ticketBounds.min}-{ticketBounds.max} pts</span>
+                  </div>
+                </div>
+
+                <div className="bet-builder">
+                  <section className="bet-section">
+                    <div className="section-header">
+                      <h3>Selecciona equipos</h3>
+                      <div className="counters">
+                        <span className="counter fav-counter"><span className="dot-fav" /> Favoritos {favorites.length}/{favoriteBounds.min}-{favoriteBounds.max}</span>
+                        <span className="counter anti-counter"><span className="dot-anti" /> Antifavoritos {antiFavorites.length}/{antiBounds.min}-{antiBounds.max}</span>
+                      </div>
+                    </div>
+                    <div className="groups-grid">
+                      {POT_NUMBERS.map((pot) => (
+                        <div className="group-card" key={pot}>
+                          <h3 className="group-label">Bombo {pot}</h3>
+                          <div className="group-teams">
+                            {(POTS[pot] ?? []).map((tname) => {
+                              const teamId = tname;
+                              const isFav  = favorites.includes(teamId);
+                              const isAnti = antiFavorites.includes(teamId);
+                              const team   = TEAMS.find((t) => t.id === teamId);
+                              return (
+                                <div className="team-dual" key={teamId}>
+                                  <div className="team-info">
+                                    <span className="team-name">{tname}</span>
+                                    {isFav && (
+                                      <button
+                                        type="button"
+                                        className={`star-btn${superFavorite === teamId ? " star-btn--active" : ""}`}
+                                        onClick={() => setSuperFavorite(superFavorite === teamId ? null : teamId)}
+                                        title={superFavorite === teamId ? "Quitar superfavorito" : "Marcar como campeón (desempate)"}
+                                      >
+                                        {superFavorite === teamId ? "★" : "☆"}
+                                      </button>
+                                    )}
+                                    <span className="team-price">{team?.price ?? 0} pts</span>
+                                  </div>
+                                  <div className="team-controls">
+                                    <button
+                                      className={`team-btn fav-btn ${isFav ? "active" : ""} ${!isFav && (favorites.length >= favoriteBounds.max || potFull(pot, true) || isAnti) ? "disabled" : ""}`}
+                                      onClick={() => toggleTeam(teamId, true)}
+                                      disabled={!isFav && (favorites.length >= favoriteBounds.max || potFull(pot, true) || isAnti)}
+                                    />
+                                    <button
+                                      className={`team-btn anti-btn ${isAnti ? "active" : ""} ${!isAnti && (antiFavorites.length >= antiBounds.max || potFull(pot, false) || isFav) ? "disabled" : ""}`}
+                                      onClick={() => toggleTeam(teamId, false)}
+                                      disabled={!isAnti && (antiFavorites.length >= antiBounds.max || potFull(pot, false) || isFav)}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="bet-actions">
+                      <button
+                        className={`btn confirm-btn ${allValidBet ? "" : "confirm-btn-disabled"}`}
+                        disabled={!allValidBet || betSaving}
+                        onClick={handleSaveBet}
+                      >
+                        {betSaving ? "Guardando…" : allValidBet ? `Guardar apuesta de ${betUser}` : "Completa la apuesta para guardar"}
+                      </button>
+                      <button
+                        className="btn admin-danger-btn"
+                        disabled={betSaving}
+                        onClick={handleResetBet}
+                        style={{ marginLeft: "0.75rem" }}
+                      >
+                        Resetear apuesta
+                      </button>
+                    </div>
+                  </section>
+                </div>
+
+                <div className="grid" style={{ marginTop: "1.5rem" }}>
+                  <article className="card highlight summary-card">
+                    <h2>Resumen</h2>
+                    <p>Favoritos: {favoritesCost} pts</p>
+                    <p>Antifavoritos: −{antiDiscount} pts</p>
+                    <p><strong>Total: {ticketCost} pts</strong></p>
+                    <ul className="checks">
+                      {validationsBet.map((r) => (
+                        <li className={r.ok ? "ok" : "ko"} key={r.text}>{r.ok ? "✓" : "✗"} {r.text}</li>
+                      ))}
+                    </ul>
+                  </article>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB: Crónica IA ───────────────────────────────────── */}
+        {tab === "cronica" && (
+          <div className="admin-panel card">
+            <h2>Crónica IA</h2>
+            <p className="muted" style={{ marginBottom: "1rem" }}>
+              Lee todas las apuestas de Firebase, las manda a Gemini y guarda el power ranking sarcástico
+              en <code>chronicles/latest</code>. Todos los usuarios lo ven en{" "}
+              <a href="/cronica" target="_blank" rel="noreferrer">/cronica</a>.
+            </p>
+            <textarea
+              value={chronicleContext}
+              onChange={e => setChronicleContext(e.target.value)}
+              placeholder="Contexto adicional para la crónica (opcional): resultados destacados, anécdotas, lo que quieras…"
+              rows={5}
+              style={{ width: "100%", marginBottom: "1rem", padding: "0.5rem", fontFamily: "inherit", fontSize: "0.9rem", borderRadius: "6px", border: "1px solid #ccc", resize: "vertical" }}
+            />
+            {chronicleMsg && <p className="admin-msg">{chronicleMsg}</p>}
+            {!chroniclePreview ? (
+              <button className="btn" onClick={handleGenerateChronicle} disabled={chronicleGenerating}>
+                {chronicleGenerating ? "Generando… (puede tardar 15-20s)" : "Generar crónica con IA"}
+              </button>
+            ) : (
+              <>
+                <p className="muted" style={{ marginBottom: "0.75rem", fontSize: "0.85rem" }}>
+                  Vista previa (así se verá en <a href="/cronica" target="_blank" rel="noreferrer">/cronica</a>):
+                </p>
+                <div style={{ marginBottom: "1rem" }}>
+                  <NewspaperChronicle text={chroniclePreview} dateLabel={new Date().toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })} leaderboard={chronicleLeaderboard} />
+                </div>
+                <details style={{ marginBottom: "1rem" }}>
+                  <summary style={{ cursor: "pointer", fontSize: "0.85rem", color: "#888" }}>Ver texto generado (crudo)</summary>
+                  <div style={{ whiteSpace: "pre-wrap", background: "#1a1a2e", color: "#e8e8f0", border: "1px solid #444", borderRadius: "6px", padding: "1rem", marginTop: "0.5rem", fontSize: "0.85rem", maxHeight: "300px", overflowY: "auto" }}>
+                    {chroniclePreview}
+                  </div>
+                </details>
+                <div style={{ display: "flex", gap: "0.75rem" }}>
+                  <button className="btn" onClick={handlePublishChronicle} disabled={chroniclePublishing}>
+                    {chroniclePublishing ? "Publicando…" : "Publicar crónica"}
+                  </button>
+                  <button className="btn" onClick={handleGenerateChronicle} disabled={chronicleGenerating} style={{ background: "#888" }}>
+                    {chronicleGenerating ? "Generando…" : "Regenerar"}
+                  </button>
+                  <button className="btn" onClick={() => { setChroniclePreview(null); setChronicleMsg(null); }} style={{ background: "#c0392b" }}>
+                    Cancelar
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB: Premio especial (Estadísticas) ───────────────── */}
+        {tab === "premio" && (
+          <div className="admin-panel card">
+            <h2>Premio especial 😤</h2>
+            <p className="muted" style={{ marginBottom: "1rem" }}>
+              El premio <strong>«El Quejica y Cascarrabias»</strong> de la pestaña{" "}
+              <a href="/estadisticas" target="_blank" rel="noreferrer">Estadísticas</a> se asigna a mano.
+              Cambia aquí el ganador (y, si quieres, el texto) y se guarda para todos.
+            </p>
+
+            <label className="admin-field-label" htmlFor="special-winner">Ganador</label>
+            <input
+              id="special-winner"
+              type="text"
+              value={specialWinner}
+              placeholder="Nombre del participante (vacío = Esteban por defecto)"
+              onChange={(e) => setSpecialWinner(e.target.value)}
+              style={{ width: "100%", marginBottom: "1rem", padding: "0.5rem", borderRadius: "6px", border: "1px solid #ccc" }}
+            />
+
+            <label className="admin-field-label" htmlFor="special-blurb">Frase (opcional)</label>
+            <textarea
+              id="special-blurb"
+              value={specialBlurb}
+              placeholder="Déjalo vacío para usar la frase por defecto."
+              rows={3}
+              onChange={(e) => setSpecialBlurb(e.target.value)}
+              style={{ width: "100%", marginBottom: "1rem", padding: "0.5rem", fontFamily: "inherit", fontSize: "0.9rem", borderRadius: "6px", border: "1px solid #ccc", resize: "vertical" }}
+            />
+
+            {specialMsg && <p className="admin-msg">{specialMsg}</p>}
+            <button className="btn" onClick={handleSaveSpecial} disabled={specialSaving}>
+              {specialSaving ? "Guardando…" : "Guardar premio"}
+            </button>
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}
