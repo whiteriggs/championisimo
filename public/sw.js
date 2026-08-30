@@ -65,7 +65,7 @@ self.addEventListener('fetch', (event) => {
 // notificación. Si el usuario ya tiene la app enfocada, no molestamos.
 self.addEventListener('push', (event) => {
   event.waitUntil((async () => {
-    let data = { title: 'Mundialísimo', body: '', url: '/', tag: 'mundialisimo' };
+    let data = { title: 'Championísimo', body: '', url: '/', tag: 'championisimo' };
     try { if (event.data) data = { ...data, ...event.data.json() }; } catch { /* payload no-JSON */ }
 
     const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
