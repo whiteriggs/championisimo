@@ -95,7 +95,6 @@ src/
     football-api.ts    # Fuente de partidos (Worker → estático → API) + KO + penaltis
     stats.ts           # Premios de la pestaña Estadísticas
     leaderboard.ts     # Clasificación de la porra (lecturas REST)
-    predictions.ts     # Simulaciones personales del usuario (Firestore)
     chronicle.ts / chronicles.ts / gemini.ts   # Crónicas IA
     chat.ts / push.ts  # Chat y notificaciones push
     group.ts / db.ts / fsread.ts / auth.ts      # Grupo activo, acceso a datos, login

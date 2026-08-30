@@ -3,7 +3,7 @@
 // globales porque la Champions es la misma para todos.
 //
 // Los ids llevan sufijo de edición: comparten proyecto de Firebase con el
-// Mundial pero sus datos quedan aislados.
+// Mundial, pero sus datos quedan aislados.
 //
 // Para pasar a la "Opción C" (crear/elegir grupos desde la UI) bastaría con
 // mover este registro a Firestore: el resto del código accede a los datos a

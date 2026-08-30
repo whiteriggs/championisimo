@@ -2,48 +2,27 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { POTS, TEAMS } from "@/lib/teams";
+import Crest from "@/components/Crest";
 
-type Team = {
-  id: string;
-  name: string;
-  group: string;
-  price: number;
-};
+const favoriteBounds = { min: 6, max: 9 };
+const antiBounds = { min: 3, max: 5 };
+const ticketBounds = { min: 12, max: 18 };
+const MAX_FAV_PER_POT = 3;
+const MAX_ANTI_PER_POT = 2;
+const DEADLINE = new Date("2026-09-08T21:00:00");
+const POT_NUMBERS = [1, 2, 3, 4];
 
-const groupPool: Record<string, string[]> = {
-  A: ["México", "Sudáfrica", "Rep. Corea", "Rep. Checa"],
-  B: ["Canadá", "Bosnia y Herz.", "Catar", "Suiza"],
-  C: ["Brasil", "Marruecos", "Haití", "Escocia"],
-  D: ["EE.UU.", "Paraguay", "Australia", "Turquía"],
-  E: ["Alemania", "Curazao", "Costa Marfil", "Ecuador"],
-  F: ["Países Bajos", "Japón", "Suecia", "Túnez"],
-  G: ["Bélgica", "Egipto", "Irán", "Nueva Zelanda"],
-  H: ["España", "Cabo Verde", "Arabia Saudí", "Uruguay"],
-  I: ["Francia", "Senegal", "Irak", "Noruega"],
-  J: ["Argentina", "Argelia", "Austria", "Jordania"],
-  K: ["Portugal", "RD Congo", "Uzbekistán", "Colombia"],
-  L: ["Inglaterra", "Croacia", "Ghana", "Panamá"]
-};
+function potOf(id: string) {
+  return TEAMS.find((team) => team.id === id)?.pot;
+}
 
-const teams: Team[] = Object.entries(groupPool).flatMap(([group, names]) =>
-  names.map((name, teamIndex) => ({
-    id: name,
-    name,
-    group,
-    price: 4 - teamIndex
-  }))
-);
+function countInPot(ids: string[], pot: number) {
+  return ids.filter((id) => potOf(id) === pot).length;
+}
 
-const favoriteBounds = { min: 9, max: 12 };
-const antiBounds = { min: 4, max: 6 };
-const ticketBounds = { min: 15, max: 22 };
-const DEADLINE = new Date("2026-06-11T00:00:00");
-
-function hasDuplicateGroup(ids: string[]) {
-  const groups = ids
-    .map((id) => teams.find((team) => team.id === id)?.group)
-    .filter(Boolean) as string[];
-  return new Set(groups).size !== groups.length;
+function exceedsPotLimit(ids: string[], max: number) {
+  return POT_NUMBERS.some((pot) => countInPot(ids, pot) > max);
 }
 
 export default function ApuestaDemoPage() {
@@ -52,15 +31,13 @@ export default function ApuestaDemoPage() {
   const [confirmed, setConfirmed] = useState(false);
   const isClosed = new Date() >= DEADLINE;
 
-  const groupLabels = Object.keys(groupPool);
-
   const favoritesCost = useMemo(
-    () => favorites.reduce((sum, id) => sum + (teams.find((team) => team.id === id)?.price ?? 0), 0),
+    () => favorites.reduce((sum, id) => sum + (TEAMS.find((team) => team.id === id)?.price ?? 0), 0),
     [favorites]
   );
 
   const antiDiscount = useMemo(
-    () => antiFavorites.reduce((sum, id) => sum + (teams.find((team) => team.id === id)?.price ?? 0), 0),
+    () => antiFavorites.reduce((sum, id) => sum + (TEAMS.find((team) => team.id === id)?.price ?? 0), 0),
     [antiFavorites]
   );
 
@@ -77,12 +54,12 @@ export default function ApuestaDemoPage() {
       text: `Antifavoritos: ${antiBounds.min}-${antiBounds.max} (actual ${antiFavorites.length})`
     },
     {
-      ok: !hasDuplicateGroup(favorites),
-      text: "No repetir grupo en favoritos"
+      ok: !exceedsPotLimit(favorites, MAX_FAV_PER_POT),
+      text: `Máximo ${MAX_FAV_PER_POT} favoritos por bombo`
     },
     {
-      ok: !hasDuplicateGroup(antiFavorites),
-      text: "No repetir grupo en antifavoritos"
+      ok: !exceedsPotLimit(antiFavorites, MAX_ANTI_PER_POT),
+      text: `Máximo ${MAX_ANTI_PER_POT} antifavoritos por bombo`
     },
     {
       ok: !overlap,
@@ -90,7 +67,7 @@ export default function ApuestaDemoPage() {
     },
     {
       ok: ticketCost >= ticketBounds.min && ticketCost <= ticketBounds.max,
-      text: `Coste total entre ${ticketBounds.min} y ${ticketBounds.max} euros (actual ${ticketCost} euros)`
+      text: `Coste total entre ${ticketBounds.min} y ${ticketBounds.max} pts (actual ${ticketCost} pts)`
     }
   ];
 
@@ -108,22 +85,10 @@ export default function ApuestaDemoPage() {
     }
   }
 
-  function getGroupTeams(group: string) {
-    return groupPool[group as keyof typeof groupPool] || [];
-  }
-
-  function hasGroupInFavorites(group: string): boolean {
-    return favorites.some((id) => {
-      const team = teams.find((t) => t.id === id);
-      return team?.group === group;
-    });
-  }
-
-  function hasGroupInAntifavorites(group: string): boolean {
-    return antiFavorites.some((id) => {
-      const team = teams.find((t) => t.id === id);
-      return team?.group === group;
-    });
+  function potFull(pot: number, isFavorite: boolean) {
+    return isFavorite
+      ? countInPot(favorites, pot) >= MAX_FAV_PER_POT
+      : countInPot(antiFavorites, pot) >= MAX_ANTI_PER_POT;
   }
 
   return (
@@ -141,12 +106,12 @@ export default function ApuestaDemoPage() {
 
       <section className="hero">
         <div className="hero-inner">
-          <div className="hero-crest placeholder">⚽</div>
+          <div className="hero-crest placeholder">🏆</div>
           <div className="hero-text">
             <div className="hero-eyebrow">Demo interactiva</div>
-            <h2 className="hero-name">Creador de apuesta 2026</h2>
+            <h2 className="hero-name">Creador de apuesta 26-27</h2>
             <p className="lead">
-              Elige selecciones y valida las reglas en tiempo real antes de pasar
+              Elige equipos y valida las reglas en tiempo real antes de pasar
               al registro con usuarios.
             </p>
           </div>
@@ -175,53 +140,56 @@ export default function ApuestaDemoPage() {
             <h2>Selecciona tus equipos</h2>
             <div className="counters">
               <span className="counter fav-counter">
-                <span className="dot-fav" /> Favoritos {favorites.length}/9-12
+                <span className="dot-fav" /> Favoritos {favorites.length}/{favoriteBounds.min}-{favoriteBounds.max}
               </span>
               <span className="counter anti-counter">
-                <span className="dot-anti" /> Antifavoritos {antiFavorites.length}/4-6
+                <span className="dot-anti" /> Antifavoritos {antiFavorites.length}/{antiBounds.min}-{antiBounds.max}
               </span>
             </div>
           </div>
-          {!confirmed && <p className="muted">Usa los botones verdes para favoritos y rojos para antifavoritos. Máximo 1 equipo por grupo en cada bloque.</p>}
+          {!confirmed && <p className="muted">Usa los botones verdes para favoritos y rojos para antifavoritos. Máximo {MAX_FAV_PER_POT} favoritos y {MAX_ANTI_PER_POT} antifavoritos por bombo.</p>}
           <div className="groups-grid">
-            {groupLabels.map((group) => (
-              <div className="group-card" key={`group-${group}`}>
-                <h3 className="group-label">Grupo {group}</h3>
+            {POT_NUMBERS.map((pot) => (
+              <div className="group-card" key={`pot-${pot}`}>
+                <h3 className="group-label">Bombo {pot}</h3>
                 <div className="group-teams">
-                  {getGroupTeams(group).map((name, idx) => {
+                  {POTS[pot].map((name) => {
                     const teamId = name;
                     const isFav = favorites.includes(teamId);
                     const isAnti = antiFavorites.includes(teamId);
-                    const team = teams.find((t) => t.id === teamId);
+                    const team = TEAMS.find((t) => t.id === teamId);
 
                     if (confirmed) {
                       return (
                         <div className={`team-result ${isFav ? "team-result-fav" : isAnti ? "team-result-anti" : "team-result-neutral"}`} key={teamId}>
-                          <span className="team-name">{name}</span>
+                          <span className="team-name"><Crest name={name} />{name}</span>
                           <span className="team-result-badge">{isFav ? `+${team?.price} pts` : isAnti ? `-${team?.price} pts` : `${team?.price} pts`}</span>
                         </div>
                       );
                     }
 
+                    const favBlocked = !isFav && (favorites.length >= favoriteBounds.max || potFull(pot, true) || isAnti);
+                    const antiBlocked = !isAnti && (antiFavorites.length >= antiBounds.max || potFull(pot, false) || isFav);
+
                     return (
                       <div className="team-dual" key={teamId}>
                         <div className="team-info">
-                          <span className="team-name">{name}</span>
+                          <span className="team-name"><Crest name={name} />{name}</span>
                           <span className="team-price">{team?.price || 0} pts</span>
                         </div>
                         <div className="team-controls">
                           <button
-                            className={`team-btn fav-btn ${isFav ? "active" : ""} ${(!isFav && (favorites.length >= 12 || hasGroupInFavorites(group) || isAnti)) ? "disabled" : ""}`}
+                            className={`team-btn fav-btn ${isFav ? "active" : ""} ${favBlocked ? "disabled" : ""}`}
                             onClick={() => toggleTeam(teamId, true)}
-                            disabled={!isFav && (favorites.length >= 12 || hasGroupInFavorites(group) || isAnti)}
-                            title={isFav ? "Remover de favoritos" : isAnti ? "Ya es antifavorito" : hasGroupInFavorites(group) ? "Ya hay un equipo de este grupo" : "Marcar como favorito"}
+                            disabled={favBlocked}
+                            title={isFav ? "Remover de favoritos" : isAnti ? "Ya es antifavorito" : potFull(pot, true) ? "Bombo completo en favoritos" : "Marcar como favorito"}
                             aria-label={`${name} como favorito`}
                           />
                           <button
-                            className={`team-btn anti-btn ${isAnti ? "active" : ""} ${(!isAnti && (antiFavorites.length >= 6 || hasGroupInAntifavorites(group) || isFav)) ? "disabled" : ""}`}
+                            className={`team-btn anti-btn ${isAnti ? "active" : ""} ${antiBlocked ? "disabled" : ""}`}
                             onClick={() => toggleTeam(teamId, false)}
-                            disabled={!isAnti && (antiFavorites.length >= 6 || hasGroupInAntifavorites(group) || isFav)}
-                            title={isAnti ? "Remover de antifavoritos" : isFav ? "Ya es favorito" : hasGroupInAntifavorites(group) ? "Ya hay un equipo de este grupo" : "Marcar como antifavorito"}
+                            disabled={antiBlocked}
+                            title={isAnti ? "Remover de antifavoritos" : isFav ? "Ya es favorito" : potFull(pot, false) ? "Bombo completo en antifavoritos" : "Marcar como antifavorito"}
                             aria-label={`${name} como antifavorito`}
                           />
                         </div>
@@ -253,10 +221,10 @@ export default function ApuestaDemoPage() {
       <div className="grid">
         <article className="card highlight summary-card">
           <h2>Resumen</h2>
-          <p>Coste favoritos: {favoritesCost} euros</p>
-          <p>Abono antifavoritos: {antiDiscount} euros</p>
+          <p>Coste favoritos: {favoritesCost} pts</p>
+          <p>Abono antifavoritos: {antiDiscount} pts</p>
           <p>
-            <strong>Coste final: {ticketCost} euros</strong>
+            <strong>Coste final: {ticketCost} pts</strong>
           </p>
           <h3>Validaciones</h3>
           <ul className="checks">

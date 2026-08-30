@@ -243,7 +243,7 @@ export default function ApuestaPage() {
 
       <section className="hero">
         <div className="hero-inner">
-          <div className="hero-crest placeholder">⚽</div>
+          <div className="hero-crest placeholder">🏆</div>
           <div className="hero-text">
             <div className="hero-eyebrow">{tab === "mia" ? "Tu apuesta" : "Porra Champions 26-27"}</div>
             <h2 className="hero-name">{tab === "mia" ? `Hola, ${user}` : "Apuestas de todos"}</h2>

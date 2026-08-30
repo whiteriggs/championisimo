@@ -201,7 +201,7 @@ export default function PartidosPage() {
     [filtered, selectedDay]
   );
 
-  // Partidos de la selección elegida (pestaña Equipos), agrupados por día.
+  // Partidos del equipo elegido (pestaña Equipos), agrupados por día.
   const teamGroups = useMemo(() => {
     if (!selectedTeam) return [];
     const list = matches
@@ -330,8 +330,8 @@ export default function PartidosPage() {
               </>
             ) : (
               <>
-                {/* Selector de selección */}
-                <div className="pm-teams" role="listbox" aria-label="Elige una selección">
+                {/* Selector de equipo */}
+                <div className="pm-teams" role="listbox" aria-label="Elige un equipo">
                   {TEAM_NAMES.map((name) => (
                     <button
                       key={name}
@@ -347,7 +347,7 @@ export default function PartidosPage() {
                   ))}
                 </div>
 
-                {/* Partidos de la selección elegida */}
+                {/* Partidos del equipo elegido */}
                 {selectedTeam ? (
                   teamGroups.length > 0 ? (
                     teamGroups.map((g) => (
@@ -367,7 +367,7 @@ export default function PartidosPage() {
                   )
                 ) : (
                   <p className="muted" style={{ textAlign: "center" }}>
-                    Elige una selección para ver sus partidos.
+                    Elige un equipo para ver sus partidos.
                   </p>
                 )}
               </>
