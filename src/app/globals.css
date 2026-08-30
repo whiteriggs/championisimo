@@ -2052,6 +2052,11 @@ a {
   border-top: 2px solid var(--line);
 }
 
+/* La tabla única de 36 ocupa toda la tarjeta; el nombre se queda con el sobrante. */
+.group-standing-card .standings-table { width: 100%; }
+.group-standing-card .standings-table td.team-name,
+.group-standing-card .standings-table th:nth-child(2) { width: 100%; text-align: left; }
+
 .zone-legend {
   list-style: none;
   display: flex;
