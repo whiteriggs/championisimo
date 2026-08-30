@@ -1,4 +1,4 @@
-import { Match } from "./scoring";
+import type { Match } from "./scoring";
 import { TEAMS, UEFA_SEED } from "./teams";
 
 export type TeamStanding = {

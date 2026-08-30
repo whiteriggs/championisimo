@@ -40,6 +40,7 @@ const ALL_RULES = [
     title: "Puntuación por partido",
     items: [
       "Fase liga: +1 por gol, +5 por empate, +10 por victoria.",
+      "Acabar entre los 8 primeros de la fase liga: +20 puntos.",
       "Eliminatorias: +1 por gol, +5 por jugar, +5 por empate, +10 por victoria.",
       "Los cruces son a doble partido: ida y vuelta puntúan por separado.",
       "Partidos resueltos en penaltis cuentan como empate.",

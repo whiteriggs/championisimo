@@ -1,4 +1,18 @@
+import { buildLeagueStandings, zoneForPosition } from "./standings";
+
 export type Phase = "league" | "knockout";
+
+/** Partidos que juega cada equipo en la fase liga. */
+const LEAGUE_MATCHDAYS = 8;
+
+/**
+ * Bonus para los 8 primeros de la fase liga. Se saltan el playoff, así que
+ * juegan dos partidos menos que los clasificados del 9 al 24; sin esto, acabar
+ * noveno y ganar el playoff rentaría más que acabar primero.
+ * El valor equivale a lo que saca de esa eliminatoria un equipo medio:
+ * dos partidos × (+5 por jugar, +5 de media por resultado, ~1,3 goles).
+ */
+export const DIRECT_R16_BONUS = 20;
 
 export type Match = {
   id: string;
@@ -79,6 +93,18 @@ export function matchPoints(match: Match, opts: ScoringOptions = {}): Record<str
   return pts;
 }
 
+/**
+ * Los 8 primeros, pero solo con la fase liga ya terminada: mientras se juega,
+ * el bonus bailaría de jornada en jornada.
+ */
+function directR16Teams(matches: Match[]): string[] {
+  const table = buildLeagueStandings(matches);
+  if (!table.every((row) => row.played === LEAGUE_MATCHDAYS)) return [];
+  return table
+    .filter((_, index) => zoneForPosition(index + 1) === "r16")
+    .map((row) => row.name);
+}
+
 /** Accumulates all played matches into { teamName → totalPoints }. */
 export function buildTeamTotals(matches: Match[], opts: ScoringOptions = {}): Record<string, number> {
   const totals: Record<string, number> = {};
@@ -86,6 +112,9 @@ export function buildTeamTotals(matches: Match[], opts: ScoringOptions = {}): Re
     for (const [team, pts] of Object.entries(matchPoints(match, opts))) {
       totals[team] = (totals[team] ?? 0) + pts;
     }
+  }
+  for (const team of directR16Teams(matches)) {
+    totals[team] = (totals[team] ?? 0) + DIRECT_R16_BONUS;
   }
   return totals;
 }

@@ -23,10 +23,11 @@ Tu puntuación total = **puntos de tus favoritos − puntos de tus antifavoritos
 
 | Fase | Por gol | Empate | Victoria | Bonus |
 |------|:------:|:------:|:--------:|-------|
-| Fase liga | +1 | +5 | +10 | — |
+| Fase liga | +1 | +5 | +10 | **+20** por acabar entre los 8 primeros |
 | Eliminatorias | +1 | +5 | +10 | **+5 por jugar** (cada partido) |
 
 - En **eliminatorias**, además de goles y resultado, cada equipo recibe **+5 solo por jugar** el partido. Como los cruces son **a doble partido** (salvo la final), ida y vuelta puntúan por separado: llegar lejos paga doble. Por eso un antifavorito fuerte que aguanta hace mucho daño.
+- Los **8 primeros** de la fase liga se saltan el playoff, así que juegan dos partidos menos que los clasificados del 9 al 24. El bonus de **+20** compensa justo eso (dos partidos × [+5 por jugar, +5 de media por resultado, ~1,3 goles]); sin él, acabar noveno y ganar el playoff rentaría más que acabar primero.
 - **Penaltis**: cuentan como **empate** (+5 a cada equipo). Solo cuentan los goles del **juego** (prórroga incluida), **no los de la tanda**. La tanda solo decide quién avanza en el cuadro.
 
 La lógica vive en [`src/lib/scoring.ts`](src/lib/scoring.ts).
