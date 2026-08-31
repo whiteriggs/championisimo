@@ -2,6 +2,7 @@ import { getGroupId, DEFAULT_GROUP } from "./group";
 import { USERS } from "./auth";
 import { fetchAllMatches, isLiveStatus } from "./football-api";
 import { buildTeamTotals, type Match } from "./scoring";
+import { buildLeagueStandings } from "./standings";
 import { teamName } from "./teams";
 import { readCollection } from "./fsread";
 
@@ -9,6 +10,10 @@ export interface LeaderboardRow {
   user: string;
   total: number;
   confirmed: boolean;
+  /** Desempate 1: posición media de tus favoritos en la fase liga. Menor es mejor. */
+  avgFavPosition?: number;
+  /** Desempate 2: puntos del equipo que marcaste como campeón. */
+  superFavoritePoints?: number;
 }
 
 type FsValue = {
@@ -22,7 +27,7 @@ function strArray(v?: FsValue): string[] {
   return (v?.arrayValue?.values ?? []).map((x) => x.stringValue ?? "").filter(Boolean);
 }
 
-type BetDoc = { user: string; favorites: string[]; antiFavorites: string[]; confirmed: boolean };
+type BetDoc = { user: string; favorites: string[]; antiFavorites: string[]; superFavorite: string | null; confirmed: boolean };
 export type { BetDoc };
 
 // Lecturas a través del Worker (cacheadas) para no quemar la cuota de Firestore
@@ -56,6 +61,7 @@ export async function fetchBetsRest(groupId: string): Promise<BetDoc[]> {
     user: doc.name.split("/").pop() ?? "",
     favorites: strArray(doc.fields?.favorites),
     antiFavorites: strArray(doc.fields?.antiFavorites),
+    superFavorite: doc.fields?.superFavorite?.stringValue ?? null,
     confirmed: doc.fields?.confirmed?.booleanValue ?? false,
   }));
 }
@@ -85,17 +91,34 @@ export async function fetchLeaderboard(): Promise<LeaderboardRow[]> {
       played: true,
     }));
   const teamTotals = buildTeamTotals(scored);
+  const position = new Map(buildLeagueStandings(scored).map((row, i) => [row.name, i + 1]));
+  // El orden de `users` es el de inscripción y sirve de último desempate.
+  const signedUp = new Map(users.map((u, i) => [u, i]));
 
   return users
     .map((u) => {
       const bet = bets.find((b) => b.user === u.toLowerCase());
-      const fav = bet?.confirmed
-        ? bet.favorites.reduce((s, id) => s + (teamTotals[teamName(id)] ?? 0), 0)
-        : 0;
-      const anti = bet?.confirmed
-        ? bet.antiFavorites.reduce((s, id) => s + (teamTotals[teamName(id)] ?? 0), 0)
-        : 0;
-      return { user: u, total: fav - anti, confirmed: bet?.confirmed ?? false };
+      const points = (id: string) => teamTotals[teamName(id)] ?? 0;
+      const fav = bet?.confirmed ? bet.favorites.reduce((s, id) => s + points(id), 0) : 0;
+      const anti = bet?.confirmed ? bet.antiFavorites.reduce((s, id) => s + points(id), 0) : 0;
+      const favPositions = bet?.confirmed
+        ? bet.favorites.map((id) => position.get(teamName(id)) ?? 36)
+        : [];
+      return {
+        user: u,
+        total: fav - anti,
+        confirmed: bet?.confirmed ?? false,
+        // Sin apuesta no hay desempate que valga: al fondo.
+        avgFavPosition: favPositions.length
+          ? favPositions.reduce((s, p) => s + p, 0) / favPositions.length
+          : 99,
+        superFavoritePoints: bet?.superFavorite ? points(bet.superFavorite) : 0,
+      };
     })
-    .sort((a, b) => b.total - a.total);
+    .sort((a, b) =>
+      b.total - a.total ||
+      a.avgFavPosition - b.avgFavPosition ||
+      b.superFavoritePoints - a.superFavoritePoints ||
+      (signedUp.get(a.user) ?? 0) - (signedUp.get(b.user) ?? 0)
+    );
 }

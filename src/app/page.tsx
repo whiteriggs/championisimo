@@ -51,7 +51,7 @@ const ALL_RULES = [
     title: "Desempates",
     items: [
       "Mejor posición media de tus favoritos en la tabla final de la fase liga (1-36).",
-      "Si persiste el empate, decide el superfavorito.",
+      "Si sigue el empate, gana quien tenga más puntos su ⭐ superfavorito.",
       "Último criterio: orden de inscripción.",
     ],
   },
