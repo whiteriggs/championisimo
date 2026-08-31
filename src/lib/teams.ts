@@ -1,8 +1,10 @@
 export type Team = {
   id: string;
   name: string;
-  /** Bombo del sorteo (1-4). Determina el precio en la porra. */
+  /** Bombo del sorteo (1-4). Solo informativo: el precio ya no depende de él. */
   pot: number;
+  /** Puesto en el coeficiente UEFA (1-36). De aquí sale el precio. */
+  rank: number;
   price: number;
   /** id en football-data.org, usado para el escudo. */
   apiId: number;
@@ -60,16 +62,46 @@ const META: Record<string, { apiId: number; country: string }> = {
   "Sabah": { apiId: 10233, country: "Azerbaiyán" },
 };
 
+/**
+ * Precio por puesto del coeficiente UEFA (1-36).
+ * Calibrado con los puntos de porra reales de 2024/25 y 2025/26, las dos
+ * temporadas ya jugadas con formato de 36: se ajustó una curva de puntos
+ * esperados por puesto y el precio es proporcional a ella. Así ninguna franja
+ * del ranking sale a cuenta y no hacen falta cupos por bombo.
+ */
+const PRICE_BY_RANK = [
+  25, 23, 21, 20, 19, 17, 16, 15, 14, 13, 12, 11,
+  10, 10, 9, 8, 8, 7, 7, 6, 6, 5, 5, 5,
+  4, 4, 4, 4, 3, 3, 3, 3, 2, 2, 2, 2,
+];
+
+/**
+ * Solo los 24 mejores del ranking pueden ser antifavoritos: son los que se
+ * presupone que al menos llegan al playoff. Apostar contra el último del bombo
+ * 4 no tiene mérito ninguno.
+ */
+export const ANTI_MAX_RANK = 24;
+
 export const TEAMS: Team[] = Object.entries(POTS).flatMap(([pot, names]) =>
-  names.map((name) => ({
-    id: name,
-    name,
-    pot: Number(pot),
-    price: 5 - Number(pot),
-    apiId: META[name].apiId,
-    country: META[name].country,
-  }))
+  names.map((name, index) => {
+    const rank = (Number(pot) - 1) * 9 + index + 1;
+    return {
+      id: name,
+      name,
+      pot: Number(pot),
+      rank,
+      price: PRICE_BY_RANK[rank - 1],
+      apiId: META[name].apiId,
+      country: META[name].country,
+    };
+  })
 );
+
+/** Un equipo solo puede ir de antifavorito si está en el top 24 del ranking. */
+export function canBeAnti(teamId: string): boolean {
+  const team = teamById(teamId);
+  return team ? team.rank <= ANTI_MAX_RANK : false;
+}
 
 export const TEAM_NAMES: string[] = [...TEAMS.map((t) => t.name)].sort((a, b) =>
   a.localeCompare(b, "es")
@@ -77,7 +109,7 @@ export const TEAM_NAMES: string[] = [...TEAMS.map((t) => t.name)].sort((a, b) =>
 
 /** Ranking global por bombo y coeficiente UEFA (0 = mejor). Desempate final. */
 export const UEFA_SEED: Record<string, number> = Object.fromEntries(
-  TEAMS.map((t) => [t.name, (t.pot - 1) * 9 + POTS[t.pot].indexOf(t.name)])
+  TEAMS.map((t) => [t.name, t.rank - 1])
 );
 
 export function teamById(id: string): Team | undefined {

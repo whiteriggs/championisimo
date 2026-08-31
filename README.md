@@ -13,9 +13,9 @@ Es la segunda edición del proyecto, heredada de [Mundialísimo](https://github.
 Cada participante confecciona su **apuesta** (un "ticket") con:
 
 - **Favoritos**: entre 6 y 9 equipos. Sus puntos te **suman**.
-- **Antifavoritos**: entre 3 y 5 equipos. Sus puntos te **restan**.
-- Máximo **3 favoritos y 2 antifavoritos del mismo bombo**, para obligar a repartir.
-- Hay un **presupuesto** (bombo 1 cuesta 4 puntos, bombo 4 solo 1) y la resta favoritos − antifavoritos debe quedar **entre 12 y 18 puntos**.
+- **Antifavoritos**: entre 3 y 5 equipos. Sus puntos te **restan**. Solo pueden salir de los **24 primeros del ranking UEFA**, los que se presupone que al menos llegan al playoff.
+- Cada equipo tiene su **precio individual según el coeficiente UEFA** (del 1.º a 25 puntos al 36.º a 2), calibrado con lo que puntuó de verdad cada puesto en las dos temporadas ya jugadas con formato de 36.
+- La resta favoritos − antifavoritos debe quedar **entre 65 y 72 puntos**. El bombo del sorteo es solo informativo.
 
 Tu puntuación total = **puntos de tus favoritos − puntos de tus antifavoritos**.
 
@@ -40,7 +40,7 @@ La lógica vive en [`src/lib/scoring.ts`](src/lib/scoring.ts).
 |---------|------|----------|
 | **Calendario** | `/partidos` | Todos los partidos por día, con horario **en hora local** del usuario y dónde verlos por TV. |
 | **Porra** | `/resultados` | Ranking de la porra + desglose partido a partido (columnas de más reciente a más antigua) y gráfica de evolución. Se mueve en directo. |
-| **Apuestas** | `/apuesta` | Construye tu ticket de favoritos/antifavoritos por bombos respetando el presupuesto. |
+| **Apuestas** | `/apuesta` | Construye tu ticket de favoritos/antifavoritos sobre la lista de los 36 respetando el presupuesto. |
 | **Clasificación** | `/clasificacion` | La tabla única de los 36 de la fase liga, con los tramos de octavos directos (1-8), playoff (9-24) y eliminados (25-36). |
 | **Estadísticas** | `/estadisticas` | Palmarés de coña: El Pelotazo, El Hostión, Rey del Mambo, Farolillo de Honor, Ave Fénix, El Titanic… |
 | **Crónica** | `/cronica` | Crónica de la jornada con estética de periódico, generada por IA (Gemini). |
@@ -91,7 +91,7 @@ src/
   components/          # NavBar, ChatWidget, NextMatchCountdown, Crest, NewspaperChronicle…
   lib/
     scoring.ts         # Reglas de puntuación de la porra
-    teams.ts           # 36 clubes, bombos, precios, escudos y códigos
+    teams.ts           # 36 clubes, ranking UEFA, precios, escudos y códigos
     standings.ts       # Tabla única de la fase liga (con desempates)
     football-api.ts    # Fuente de partidos (Worker → estático → API) + KO + penaltis
     stats.ts           # Premios de la pestaña Estadísticas

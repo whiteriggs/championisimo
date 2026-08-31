@@ -23,27 +23,15 @@ import {
   removeUser,
   deleteUserPassword,
 } from "@/lib/auth";
-import { TEAMS, POTS } from "@/lib/teams";
+import { TEAMS, canBeAnti, ANTI_MAX_RANK } from "@/lib/teams";
 
 // ─── Bet logic (same as /apuesta) ──────────────────────────────
 const favoriteBounds  = { min: 6, max: 9 };
 const antiBounds      = { min: 3, max: 5 };
-const ticketBounds    = { min: 12, max: 18 };
-const MAX_FAV_PER_POT  = 3;
-const MAX_ANTI_PER_POT = 2;
-const POT_NUMBERS     = [1, 2, 3, 4];
+const ticketBounds    = { min: 65, max: 72 };
 
-function potOf(id: string) {
-  return TEAMS.find((t) => t.id === id)?.pot ?? 0;
-}
-
-function countInPot(ids: string[], pot: number) {
-  return ids.filter((id) => potOf(id) === pot).length;
-}
-
-function exceedsPotLimit(ids: string[], max: number) {
-  return POT_NUMBERS.some((p) => countInPot(ids, p) > max);
-}
+/** Los 36 ordenados por coeficiente UEFA, que es de donde sale el precio. */
+const rankedTeams = [...TEAMS].sort((a, b) => a.rank - b.rank);
 
 type Tab = "usuarios" | "contrasenas" | "apuestas" | "cronica" | "premio";
 
@@ -486,12 +474,6 @@ PROHIBIDO POR DEFECTO (salvo que las INDICACIONES DEL EDITOR lo pidan expresamen
     }
   }
 
-  function potFull(pot: number, isFavorite: boolean) {
-    return isFavorite
-      ? countInPot(favorites, pot) >= MAX_FAV_PER_POT
-      : countInPot(antiFavorites, pot) >= MAX_ANTI_PER_POT;
-  }
-
   const favoritesCost  = useMemo(() => favorites.reduce((s, id) => s + (TEAMS.find((t) => t.id === id)?.price ?? 0), 0), [favorites]);
   const antiDiscount   = useMemo(() => antiFavorites.reduce((s, id) => s + (TEAMS.find((t) => t.id === id)?.price ?? 0), 0), [antiFavorites]);
   const ticketCost     = favoritesCost - antiDiscount;
@@ -500,8 +482,6 @@ PROHIBIDO POR DEFECTO (salvo que las INDICACIONES DEL EDITOR lo pidan expresamen
   const validationsBet = [
     { ok: favorites.length >= favoriteBounds.min && favorites.length <= favoriteBounds.max, text: `Favoritos: ${favoriteBounds.min}-${favoriteBounds.max} (actual ${favorites.length})` },
     { ok: antiFavorites.length >= antiBounds.min && antiFavorites.length <= antiBounds.max, text: `Antifavoritos: ${antiBounds.min}-${antiBounds.max} (actual ${antiFavorites.length})` },
-    { ok: !exceedsPotLimit(favorites, MAX_FAV_PER_POT), text: `Máximo ${MAX_FAV_PER_POT} favoritos por bombo` },
-    { ok: !exceedsPotLimit(antiFavorites, MAX_ANTI_PER_POT), text: `Máximo ${MAX_ANTI_PER_POT} antifavoritos por bombo` },
     { ok: !overlap, text: "Un equipo no puede estar en ambos bloques" },
     { ok: ticketCost >= ticketBounds.min && ticketCost <= ticketBounds.max, text: `Coste entre ${ticketBounds.min} y ${ticketBounds.max} pts (actual ${ticketCost} pts)` },
     { ok: superFavorite !== null, text: "Marca un favorito como campeón (★)" },
@@ -657,50 +637,49 @@ PROHIBIDO POR DEFECTO (salvo que las INDICACIONES DEL EDITOR lo pidan expresamen
                         <span className="counter anti-counter"><span className="dot-anti" /> Antifavoritos {antiFavorites.length}/{antiBounds.min}-{antiBounds.max}</span>
                       </div>
                     </div>
-                    <div className="groups-grid">
-                      {POT_NUMBERS.map((pot) => (
-                        <div className="group-card" key={pot}>
-                          <h3 className="group-label">Bombo {pot}</h3>
-                          <div className="group-teams">
-                            {(POTS[pot] ?? []).map((tname) => {
-                              const teamId = tname;
-                              const isFav  = favorites.includes(teamId);
-                              const isAnti = antiFavorites.includes(teamId);
-                              const team   = TEAMS.find((t) => t.id === teamId);
-                              return (
-                                <div className="team-dual" key={teamId}>
-                                  <div className="team-info">
-                                    <span className="team-name">{tname}</span>
-                                    {isFav && (
-                                      <button
-                                        type="button"
-                                        className={`star-btn${superFavorite === teamId ? " star-btn--active" : ""}`}
-                                        onClick={() => setSuperFavorite(superFavorite === teamId ? null : teamId)}
-                                        title={superFavorite === teamId ? "Quitar superfavorito" : "Marcar como campeón (desempate)"}
-                                      >
-                                        {superFavorite === teamId ? "★" : "☆"}
-                                      </button>
-                                    )}
-                                    <span className="team-price">{team?.price ?? 0} pts</span>
-                                  </div>
-                                  <div className="team-controls">
-                                    <button
-                                      className={`team-btn fav-btn ${isFav ? "active" : ""} ${!isFav && (favorites.length >= favoriteBounds.max || potFull(pot, true) || isAnti) ? "disabled" : ""}`}
-                                      onClick={() => toggleTeam(teamId, true)}
-                                      disabled={!isFav && (favorites.length >= favoriteBounds.max || potFull(pot, true) || isAnti)}
-                                    />
-                                    <button
-                                      className={`team-btn anti-btn ${isAnti ? "active" : ""} ${!isAnti && (antiFavorites.length >= antiBounds.max || potFull(pot, false) || isFav) ? "disabled" : ""}`}
-                                      onClick={() => toggleTeam(teamId, false)}
-                                      disabled={!isAnti && (antiFavorites.length >= antiBounds.max || potFull(pot, false) || isFav)}
-                                    />
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
+                    <div className="group-card teams-single">
+                      <h3 className="group-label">Los 36 por coeficiente UEFA</h3>
+                      <div className="group-teams">
+                        {rankedTeams.map((team) => {
+                          const teamId = team.id;
+                          const isFav  = favorites.includes(teamId);
+                          const isAnti = antiFavorites.includes(teamId);
+                          const antiAllowed = canBeAnti(teamId);
+                          const favBlocked = !isFav && (favorites.length >= favoriteBounds.max || isAnti);
+                          const antiBlocked = !isAnti && (antiFavorites.length >= antiBounds.max || isFav || !antiAllowed);
+                          return (
+                            <div className="team-dual" key={teamId}>
+                              <div className="team-info">
+                                <span className="team-name"><span className="team-rank">{team.rank}</span>{team.name}</span>
+                                {isFav && (
+                                  <button
+                                    type="button"
+                                    className={`star-btn${superFavorite === teamId ? " star-btn--active" : ""}`}
+                                    onClick={() => setSuperFavorite(superFavorite === teamId ? null : teamId)}
+                                    title={superFavorite === teamId ? "Quitar superfavorito" : "Marcar como campeón (desempate)"}
+                                  >
+                                    {superFavorite === teamId ? "★" : "☆"}
+                                  </button>
+                                )}
+                                <span className="team-price">{team.price} pts</span>
+                              </div>
+                              <div className="team-controls">
+                                <button
+                                  className={`team-btn fav-btn ${isFav ? "active" : ""} ${favBlocked ? "disabled" : ""}`}
+                                  onClick={() => toggleTeam(teamId, true)}
+                                  disabled={favBlocked}
+                                />
+                                <button
+                                  className={`team-btn anti-btn ${isAnti ? "active" : ""} ${antiBlocked ? "disabled" : ""}`}
+                                  onClick={() => toggleTeam(teamId, false)}
+                                  disabled={antiBlocked}
+                                  title={!antiAllowed ? `Solo los ${ANTI_MAX_RANK} primeros pueden ser antifavoritos` : undefined}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     <div className="bet-actions">

@@ -9,8 +9,8 @@ const ALL_RULES = [
   {
     title: "Cómo funciona",
     items: [
-      "Elige entre 6 y 9 favoritos y entre 3 y 5 antifavoritos de los 36 equipos.",
-      "Máximo 3 favoritos y 2 antifavoritos del mismo bombo.",
+      "Elige entre 6 y 9 favoritos de los 36 equipos y entre 3 y 5 antifavoritos.",
+      "Los antifavoritos solo pueden salir de los 24 primeros del ranking: son los que se presupone que al menos llegan al playoff.",
       "Tu puntuación = puntos de favoritos − puntos de antifavoritos.",
       "Apuestas idénticas se desempatan por orden de registro.",
     ],
@@ -18,9 +18,10 @@ const ALL_RULES = [
   {
     title: "Precio de los equipos",
     items: [
-      "El precio sale del bombo del sorteo: bombo 1 cuesta 4 puntos, bombo 2 vale 3, bombo 3 vale 2 y bombo 4 vale 1.",
-      "La suma del precio de tus favoritos menos el de tus antifavoritos debe estar entre 12 y 18 puntos.",
-      "Esto obliga a equilibrar: no puedes coger solo grandes sin arriesgarte a poner un grande de antifavorito.",
+      "Cada equipo tiene su propio precio según el coeficiente UEFA: del PSG a 25 puntos al último del ranking a 2.",
+      "Los precios están calibrados con lo que puntuó de verdad cada puesto en las dos temporadas ya jugadas con formato de 36, así que ninguna franja sale a cuenta por sí sola.",
+      "La suma del precio de tus favoritos menos el de tus antifavoritos debe quedar entre 65 y 72 puntos.",
+      "El bombo del sorteo solo se muestra como información: ya no manda en el precio ni obliga a repartir.",
     ],
   },
   {

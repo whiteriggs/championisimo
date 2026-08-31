@@ -330,6 +330,24 @@ a {
   gap: 8px;
 }
 
+/* Los 36 en una sola tarjeta: el precio sale del ranking, no del bombo. */
+.teams-single {
+  margin-top: 16px;
+}
+
+.teams-single .group-teams {
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+}
+
+.team-rank {
+  flex-shrink: 0;
+  min-width: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .team-dual {
   display: flex;
   align-items: center;
