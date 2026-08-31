@@ -28,10 +28,10 @@ const ALL_RULES = [
     title: "Puntuación por partido",
     items: [
       "Fase liga: +1 por gol, +5 por empate, +10 por victoria.",
-      "Acabar entre los 8 primeros de la fase liga: +20 puntos.",
+      "El playoff (9º-24º) NO puntúa: solo sirve para entrar en octavos.",
       "Eliminatorias: +1 por gol, +5 por jugar, +5 por empate, +10 por victoria.",
       "Los cruces son a doble partido: ida y vuelta puntúan por separado, así que llegar lejos paga doble.",
-      "El bonus de los 8 primeros compensa el playoff que se ahorran: si no, acabar noveno y ganar el cruce rentaría más que acabar primero.",
+      "Así todos los equipos que llegan a la misma ronda han punteado sobre los mismos partidos: 8 de liga más dos por cada cruce que sobrevivan.",
       "Partidos resueltos en penaltis cuentan como empate.",
       "Los goles en la tanda de penaltis no puntúan.",
     ],

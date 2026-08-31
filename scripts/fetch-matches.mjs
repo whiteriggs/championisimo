@@ -68,7 +68,8 @@ const NAME_MAP = {
 function toName(n) { return NAME_MAP[n] ?? n; }
 
 function stageToPhase(stage) {
-  return stage === "LEAGUE_STAGE" ? "league" : "knockout";
+  if (stage === "LEAGUE_STAGE") return "league";
+  return stage === "PLAYOFFS" ? "playoff" : "knockout";
 }
 
 // Goles de la tanda de penaltis = fullTime − (regularTime + extraTime).

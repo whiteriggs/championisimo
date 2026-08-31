@@ -133,7 +133,14 @@ export async function fetchLeagueStandings(): Promise<ApiTableRow[]> {
 
 // ── Matches ────────────────────────────────────────────────────────────────
 function stageToPhase(stage: string): Phase {
-  return stage === "LEAGUE_STAGE" ? "league" : "knockout";
+  if (stage === "LEAGUE_STAGE") return "league";
+  return stage === "PLAYOFFS" ? "playoff" : "knockout";
+}
+
+// El Worker y el matches.json pueden venir de una versión anterior que marcaba el
+// playoff como "knockout": la fase se recalcula siempre desde el stage.
+function withPhase(matches: ApiAllMatch[]): ApiAllMatch[] {
+  return matches.map((m) => ({ ...m, phase: stageToPhase(m.stage) }));
 }
 
 // Goles de la tanda de penaltis = fullTime − (regularTime + extraTime).
@@ -237,7 +244,7 @@ export async function fetchAllMatches(): Promise<ApiAllMatch[]> {
       const liveRes = await fetch(LIVE_MATCHES_URL, { cache: "no-store" });
       if (liveRes.ok) {
         const data = await liveRes.json();
-        if (Array.isArray(data) && data.length > 0) return data as ApiAllMatch[];
+        if (Array.isArray(data) && data.length > 0) return withPhase(data as ApiAllMatch[]);
       }
     } catch {
       // ignorar — caer al JSON estático
@@ -250,7 +257,7 @@ export async function fetchAllMatches(): Promise<ApiAllMatch[]> {
     const staticRes = await fetch(bust(`${basePath}/matches.json`), { cache: "no-store" });
     if (staticRes.ok) {
       const data = await staticRes.json();
-      if (Array.isArray(data) && data.length > 0) return data as ApiAllMatch[];
+      if (Array.isArray(data) && data.length > 0) return withPhase(data as ApiAllMatch[]);
     }
   } catch {
     // ignorar — intentar API directa
