@@ -267,7 +267,7 @@ export default function ApuestaPage() {
       <>
       {confirmed && !isClosed && (ticketCost < ticketBounds.min || ticketCost > ticketBounds.max) && (
         <div className="deadline-notice ko" style={{ margin: "0 1rem 0" }}>
-          El orden de los bombos ha cambiado y tu apuesta ya no es válida ({ticketCost} pts, rango {ticketBounds.min}–{ticketBounds.max}). Pulsa &quot;Editar apuesta&quot; para ajustarla.
+          Las reglas han cambiado y tu apuesta ya no es válida ({ticketCost} pts, rango {ticketBounds.min}–{ticketBounds.max}). Pulsa &quot;Editar apuesta&quot; para ajustarla.
         </div>
       )}
 
