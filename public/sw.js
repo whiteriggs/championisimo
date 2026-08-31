@@ -1,4 +1,4 @@
-const CACHE = 'championisimo-v1';
+const CACHE = 'championisimo-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 

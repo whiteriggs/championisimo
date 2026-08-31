@@ -8,7 +8,7 @@ import Crest from "@/components/Crest";
 const favoriteBounds = { min: 6, max: 9 };
 const antiBounds = { min: 3, max: 5 };
 const ticketBounds = { min: 65, max: 72 };
-const DEADLINE = new Date("2026-09-08T21:00:00");
+const DEADLINE = new Date("2026-09-08T18:30:00");
 
 /** Los 36 ordenados por coeficiente UEFA, que es de donde sale el precio. */
 const rankedTeams = [...TEAMS].sort((a, b) => a.rank - b.rank);

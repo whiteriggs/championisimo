@@ -18,10 +18,10 @@ export const metadata: Metadata = {
     title: "Championisimo",
   },
   icons: {
-    apple: `${bp}/icons/apple-touch-icon.png?v=1`,
+    apple: `${bp}/icons/apple-touch-icon.png?v=5`,
     icon: [
-      { url: `${bp}/icons/icon-192x192.png?v=4`, sizes: "192x192", type: "image/png" },
-      { url: `${bp}/icons/icon-512x512.png?v=4`, sizes: "512x512", type: "image/png" },
+      { url: `${bp}/icons/icon-192x192.png?v=5`, sizes: "192x192", type: "image/png" },
+      { url: `${bp}/icons/icon-512x512.png?v=5`, sizes: "512x512", type: "image/png" },
     ],
   },
 };

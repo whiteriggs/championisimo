@@ -4,9 +4,11 @@
     python3 scripts/make-icons.py
 
 Dibuja a 4x y reduce, que es la forma barata de tener antialiasing decente.
-Diseño propio: copa de orejas genérica sobre degradado azul; nada de marcas UEFA.
+Diseño propio: copa de orejas genérica bajo una corona de estrellas, sobre
+degradado azul; nada de marcas UEFA.
 """
 
+import math
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
@@ -76,6 +78,31 @@ def diagonal_sheen():
     return layer
 
 
+def star_polygon(cx, cy, r_out, r_in, rotation=-90):
+    """Estrella de cinco puntas centrada en (cx, cy), en unidades de diseño."""
+    pts = []
+    for i in range(10):
+        ang = math.radians(rotation + i * 36)
+        r = r_out if i % 2 == 0 else r_in
+        pts.append((u(cx + r * math.cos(ang)), u(cy + r * math.sin(ang))))
+    return pts
+
+
+def star_crown():
+    """Arco de estrellas sobre la copa, de extremo a extremo."""
+    layer = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    cx, cy, radius = 512, 486, 404
+    for i in range(7):
+        ang = math.radians(197 + i * (146 / 6))
+        x = cx + radius * math.cos(ang)
+        y = cy + radius * math.sin(ang)
+        # Las de los extremos, algo menores: dan sensación de arco.
+        scale = 1.0 - 0.22 * abs(i - 3) / 3
+        d.polygon(star_polygon(x, y, 50 * scale, 21 * scale), fill=(238, 244, 255, 242))
+    return layer
+
+
 def trophy_mask():
     """Máscara blanca con la silueta de la copa."""
     m = Image.new("L", (S, S), 0)
@@ -105,7 +132,7 @@ def trophy_mask():
     return m
 
 
-def build():
+def background():
     img = corner_gradient((10, 18, 48), (22, 37, 94), (16, 26, 69), (36, 52, 126)).convert("RGBA")
     img.alpha_composite(diagonal_sheen())
 
@@ -115,8 +142,13 @@ def build():
     halo = Image.new("RGBA", (S, S), (140, 180, 255, 255))
     halo.putalpha(glow)
     img.alpha_composite(halo)
+    return img
 
-    # Copa: degradado plateado recortado con la silueta.
+
+def foreground():
+    """Estrellas, copa y año sobre transparente, para poder escalarlo."""
+    layer = star_crown()
+
     silver = vertical_gradient([
         (0.00, (248, 250, 255)),
         (0.30, (198, 210, 232)),
@@ -124,10 +156,9 @@ def build():
         (0.75, (214, 224, 242)),
         (1.00, (150, 163, 192)),
     ]).convert("RGBA")
-    img.paste(silver, (0, 0), trophy_mask())
+    layer.paste(silver, (0, 0), trophy_mask())
 
-    # Texto inferior.
-    d = ImageDraw.Draw(img)
+    d = ImageDraw.Draw(layer)
     font = load_font(u(132))
     text = "26-27"
     box = d.textbbox((0, 0), text, font=font)
@@ -137,23 +168,46 @@ def build():
         font=font,
         fill=(247, 200, 92, 255),
     )
+    return layer
 
-    # Esquinas redondeadas.
-    mask = Image.new("L", (S, S), 0)
-    ImageDraw.Draw(mask).rounded_rectangle([0, 0, S - 1, S - 1], radius=u(230), fill=255)
-    img.putalpha(mask)
+
+def build(scale=1.0, rounded=True):
+    """scale < 1 deja margen: lo que necesitan los iconos maskable de Android."""
+    img = background()
+
+    art = foreground()
+    if scale != 1.0:
+        side = int(S * scale)
+        art = art.resize((side, side), Image.LANCZOS)
+        pad = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+        pad.alpha_composite(art, ((S - side) // 2, (S - side) // 2))
+        art = pad
+    img.alpha_composite(art)
+
+    if rounded:
+        mask = Image.new("L", (S, S), 0)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, S - 1, S - 1], radius=u(230), fill=255)
+        img.putalpha(mask)
     return img
 
 
 def main():
-    icon = build()
     OUT.mkdir(parents=True, exist_ok=True)
-    for name, size in [
-        ("icon-512x512.png", 512),
-        ("icon-192x192.png", 192),
-        ("apple-touch-icon.png", 180),
-    ]:
-        icon.resize((size, size), Image.LANCZOS).save(OUT / name)
+    # (fichero, tamaño, escala del dibujo, esquinas redondeadas)
+    variants = [
+        ("icon-512x512.png", 512, 1.0, True),
+        ("icon-192x192.png", 192, 1.0, True),
+        # Maskable: Android recorta hasta un círculo, así que todo dentro del 80%.
+        ("icon-maskable-512x512.png", 512, 0.72, False),
+        ("icon-maskable-192x192.png", 192, 0.72, False),
+        # iOS aplica su propia máscara: sin transparencia ni esquinas propias.
+        ("apple-touch-icon.png", 180, 0.9, False),
+    ]
+    for name, size, scale, rounded in variants:
+        icon = build(scale=scale, rounded=rounded).resize((size, size), Image.LANCZOS)
+        if not rounded:
+            icon = icon.convert("RGB")
+        icon.save(OUT / name)
         print(f"  ✓ {name} ({size}px)")
 
 

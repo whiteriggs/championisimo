@@ -13,8 +13,8 @@ import { TEAMS as teams, teamName, canBeAnti, ANTI_MAX_RANK } from "@/lib/teams"
 const favoriteBounds = { min: 6, max: 9 };
 const antiBounds = { min: 3, max: 5 };
 const ticketBounds = { min: 65, max: 72 };
-/** Cierre: primer partido de la fase liga. */
-const DEADLINE = new Date("2026-09-08T21:00:00");
+/** Cierre: 15 minutos antes del primer partido de la fase liga (18:45). */
+const DEADLINE = new Date("2026-09-08T18:30:00");
 
 /** Los 36 ordenados por coeficiente UEFA, que es de donde sale el precio. */
 const rankedTeams = [...teams].sort((a, b) => a.rank - b.rank);
