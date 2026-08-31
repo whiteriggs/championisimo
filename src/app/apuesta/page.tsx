@@ -33,6 +33,11 @@ function betCost(favorites: string[], antiFavorites: string[]) {
     antiFavorites.reduce((s, id) => s + price(id), 0);
 }
 
+/** Huella de una apuesta: dos iguales puntuarían lo mismo toda la temporada. */
+function betKey(favorites: string[], antiFavorites: string[]) {
+  return `${[...favorites].sort().join(",")}|${[...antiFavorites].sort().join(",")}`;
+}
+
 function cap(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
@@ -74,8 +79,9 @@ export default function ApuestaPage() {
       });
       setAllBets(data);
       setAllUsers(users.map((u) => u.toLowerCase()));
+      return data;
     } catch {
-      // ignore
+      return [] as BetDoc[];
     }
   }
 
@@ -129,6 +135,14 @@ export default function ApuestaPage() {
   const ticketCost = favoritesCost - antiDiscount;
   const overlap = favorites.some((id) => antiFavorites.includes(id));
 
+  // No se revela de quién es: solo que esa combinación ya está pillada.
+  const repeated = useMemo(() => {
+    const mine = betKey(favorites, antiFavorites);
+    return allBets.some(
+      (b) => b.confirmed && b.user !== user?.toLowerCase() && betKey(b.favorites, b.antiFavorites) === mine
+    );
+  }, [allBets, favorites, antiFavorites, user]);
+
   const validations = [
     {
       ok: favorites.length >= favoriteBounds.min && favorites.length <= favoriteBounds.max,
@@ -143,7 +157,8 @@ export default function ApuestaPage() {
       ok: ticketCost >= ticketBounds.min && ticketCost <= ticketBounds.max,
       text: `Coste entre ${ticketBounds.min} y ${ticketBounds.max} pts (actual ${ticketCost} pts)`
     },
-    { ok: superFavorite !== null, text: "Marca un favorito como campeón (★)" }
+    { ok: superFavorite !== null, text: "Marca un favorito como campeón (★)" },
+    { ok: !repeated, text: "Esa combinación ya la tiene otro participante: cambia algún equipo" }
   ];
 
   const allValid = validations.every((r) => r.ok);
@@ -160,6 +175,12 @@ export default function ApuestaPage() {
     if (!user || !allValid) return;
     setSaving(true);
     try {
+      // Releer por si alguien ha confirmado esa misma combinación mientras tanto.
+      const fresh = await loadAllBets();
+      const mine = betKey(favorites, antiFavorites);
+      if (fresh.some((b) => b.confirmed && b.user !== user.toLowerCase() && betKey(b.favorites, b.antiFavorites) === mine)) {
+        return;
+      }
       await setDoc(groupDoc("bets", user.toLowerCase()), {
         favorites,
         antiFavorites,
@@ -415,6 +436,11 @@ export default function ApuestaPage() {
 
       {tab === "todas" && (
         <div className="bets-grid">
+          {!isClosed && (
+            <div className="deadline-notice" style={{ gridColumn: "1 / -1", margin: 0 }}>
+              Las apuestas de los demás se destapan al cerrar el plazo. Hasta entonces solo ves quién ha confirmado.
+            </div>
+          )}
           {allUsers.map((uid) => {
             const bet = allBets.find((b) => b.user === uid);
             const displayName = cap(uid);
@@ -433,6 +459,18 @@ export default function ApuestaPage() {
             }
 
             const cost = betCost(bet.favorites, bet.antiFavorites);
+
+            if (!isClosed && !isMe) {
+              return (
+                <div className="bet-card" key={uid}>
+                  <div className="bet-card-header">
+                    <span className="bet-card-name">{displayName}</span>
+                    <span className="status-badge status-confirmed">Confirmada</span>
+                  </div>
+                  <p className="muted" style={{ margin: "12px 0 0" }}>🔒 Se destapa al cerrar el plazo.</p>
+                </div>
+              );
+            }
 
             return (
               <div className="bet-card" key={uid}>

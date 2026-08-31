@@ -12,7 +12,8 @@ const ALL_RULES = [
       "Elige entre 6 y 9 favoritos de los 36 equipos y entre 3 y 5 antifavoritos.",
       "Los antifavoritos solo pueden salir de los 24 primeros del ranking: son los que se presupone que al menos llegan al playoff.",
       "Tu puntuación = puntos de favoritos − puntos de antifavoritos.",
-      "Apuestas idénticas se desempatan por orden de registro.",
+      "No puedes repetir la combinación de otro: si ya está pillada, cambia algún equipo.",
+      "Las apuestas de los demás están ocultas hasta que cierra el plazo. Antes solo ves quién ha confirmado.",
     ],
   },
   {
