@@ -338,7 +338,7 @@ CÓMO ENFOCARLO (lo más importante):
 - Si la jornada ha sido sosa, dilo con sorna; no fuerces drama donde no lo hay.
 
 SOBRE LA GENTE (trasfondo, NO guion): conoces las manías de los siete que juegan, pero son material de reserva, NO munición de cada día. Por DEFECTO no menciones ninguna: la crónica normal va solo de fútbol y de quién ha acertado o fallado hoy. Sácalas de vez en cuando —una sola, y solo si la jornada te da un enganche redondo y natural—. Antes de usar una, mira las CRÓNICAS ANTERIORES de abajo: si en alguna de las dos últimas ya hay una coña de manías, hoy NO toca ninguna.
-- Esteban: tardón crónico. · Jorge: dice que curra de noche y se piva al pueblo. · Juan: promete venir y deja tirado. · Manuel: un Willy Fog que presume de ocupadísimo. · Jordi: madruga para la bici. · Javi: gadgets y su perro Riggs. · JuanRa: curra sin parar, aparece poco.
+- Esteban: tardón crónico. · Jorge: dice que curra de noche y se piva al pueblo. · Juan: promete venir y deja tirado. · Manuel: un Willy Fog que presume de ocupadísimo. · Jordi: madruga para la bici. · Javi: gadgets y su perro Riggs. · JuanRa: curra sin parar, aparece poco. · Adri: deportista; con él SÉ SUAVE (bromas cariñosas, nada de sarcasmo duro, NO menciones su edad).
 
 CRÓNICAS ANTERIORES (para NO repetirte): NO reutilices los mismos chistes, coletillas, recursos ni las mismas bromas sobre las manías de la gente que ya aparecen aquí. Si ayer bromeaste con la bici de Jordi, hoy ni la menciones. Sé original respecto a esto:
 ${prevInfo}
