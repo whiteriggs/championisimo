@@ -13,11 +13,8 @@ import { TEAMS as teams, teamName, canBeAnti, ANTI_MAX_RANK } from "@/lib/teams"
 const favoriteBounds = { min: 6, max: 9 };
 const antiBounds = { min: 3, max: 5 };
 const ticketBounds = { min: 65, max: 72 };
-/** Cierre: adelantado al día del estreno, con las siete apuestas ya confirmadas. */
+/** Cierre: adelantado al día del estreno, con las ocho apuestas ya confirmadas. */
 const DEADLINE = new Date("2026-09-08T09:00:00");
-
-/** Rezagados con prórroga: siguen a tiempo hasta que confirmen, y solo hasta entonces. */
-const REZAGADOS = ["adri"];
 
 /** Los 36 ordenados por coeficiente UEFA, que es de donde sale el precio. */
 const rankedTeams = [...teams].sort((a, b) => a.rank - b.rank);
@@ -58,9 +55,7 @@ export default function ApuestaPage() {
   const [allBets, setAllBets] = useState<BetDoc[]>([]);
   const [allUsers, setAllUsers] = useState<string[]>([]);
 
-  // Al confirmar se le acaba la prórroga: deja de poder editar y ve las demás.
-  const enProrroga = !!user && REZAGADOS.includes(user.toLowerCase()) && !confirmed;
-  const isClosed = new Date() >= DEADLINE && !enProrroga;
+  const isClosed = new Date() >= DEADLINE;
 
   async function loadAllBets() {
     try {
