@@ -4,7 +4,7 @@ import { getGroupId, DEFAULT_GROUP, GROUP_ALIASES } from "./group";
 
 // Lista semilla solo para el grupo por defecto (amigos de Javi). Los grupos
 // nuevos empiezan vacíos y su admin va añadiendo jugadores desde el panel.
-export const USERS = ["Juan", "Javi", "Jordi", "Jorge", "Esteban", "Manuel", "JuanRa", "Adri", "Capde", "Iris", "Mariona", "Ester"];
+export const USERS = ["Juan", "Javi", "Jordi", "Jorge", "Esteban", "Manuel", "JuanRa", "Capde", "Iris", "Mariona", "Ester"];
 
 export async function getUsers(): Promise<string[]> {
   try {
