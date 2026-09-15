@@ -18,7 +18,7 @@ import {
 } from "@/lib/winProbability";
 
 const SIMS = 6000;
-const OUTCOME_LABEL = ["Gana el local", "Empate", "Gana el visitante"];
+const OUTCOME_SHORT = ["Local", "Empate", "Visitante"];
 
 function pct(n: number): string {
   if (n >= 9.95) return `${Math.round(n)}%`;
@@ -123,16 +123,6 @@ export default function ProbabilidadesPage() {
     () => new Map((prob?.pending ?? []).map((m) => [m.id, m])),
     [prob]
   );
-
-  // Juan y JuanRa se cortan igual: busca el prefijo más corto que los distinga.
-  const shortNames = useMemo(() => {
-    const names = (prob?.users ?? []).map((u) => u.user);
-    for (let len = 4; len < 12; len++) {
-      const cut = names.map((n) => n.slice(0, len));
-      if (new Set(cut).size === names.length) return cut;
-    }
-    return names;
-  }, [prob]);
 
   function handleLogout() {
     clearUser();
@@ -391,28 +381,28 @@ export default function ProbabilidadesPage() {
                       <table className="scen-table">
                         <thead>
                           <tr>
-                            <th className="scen-outcome">Desenlace</th>
-                            <th className="scen-p">Prob</th>
-                            {prob.users.map((u, i) => (
-                              <th key={u.user} className="scen-u">
-                                {shortNames[i]}
+                            <th className="scen-name">Quién</th>
+                            {[0, 1, 2].map((o) => (
+                              <th key={o} className="scen-u">
+                                <span className="scen-oname">{OUTCOME_SHORT[o]}</span>
+                                <span className="scen-oprob">{pct(sc.outcomeProb[o])}</span>
                               </th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
-                          {[0, 1, 2].map((o) => {
-                            const best = Math.max(...sc.winPct[o]);
+                          {prob.users.map((u, i) => {
+                            const best = Math.max(
+                              sc.winPct[0][i],
+                              sc.winPct[1][i],
+                              sc.winPct[2][i]
+                            );
                             return (
-                              <tr
-                                key={o}
-                                className={sc.outcomeProb[o] < 1 ? "scen-rare" : undefined}
-                              >
-                                <td className="scen-outcome">{OUTCOME_LABEL[o]}</td>
-                                <td className="scen-p">{pct(sc.outcomeProb[o])}</td>
-                                {prob.users.map((u, i) => (
+                              <tr key={u.user} className={isMe(u.user) ? "row-me" : undefined}>
+                                <td className="scen-name">{u.user}</td>
+                                {[0, 1, 2].map((o) => (
                                   <td
-                                    key={u.user}
+                                    key={o}
                                     className={`scen-u ${
                                       sc.winPct[o][i] === best && best > 0 ? "scen-u-lead" : ""
                                     }`}

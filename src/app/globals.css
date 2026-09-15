@@ -1391,6 +1391,15 @@ a {
 .prob-table thead th.prob-col {
   font-weight: 600;
 }
+@media (max-width: 430px) {
+  .prob-table th,
+  .prob-table td { padding: 8px 6px; }
+  .prob-table thead th { font-size: 10px; }
+}
+@media (max-width: 380px) {
+  .prob-table th,
+  .prob-table td { padding: 8px 4px; }
+}
 .prob-table .prob-win {
   color: var(--gold);
   font-weight: 800;
@@ -1454,6 +1463,12 @@ a {
   border-radius: 10px;
   padding: 10px 10px 6px;
   background: rgba(255, 255, 255, 0.02);
+  min-width: 0;
+}
+.scen-teams {
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
 }
 .scen-card--key {
   border-color: var(--gold);
@@ -1492,13 +1507,24 @@ a {
   text-align: right;
   border-bottom: 1px solid var(--line);
 }
-.scen-table th.scen-outcome { text-align: left; }
+.scen-table th.scen-name { text-align: left; }
 .scen-table td { padding: 4px; text-align: right; font-variant-numeric: tabular-nums; }
-.scen-table td.scen-outcome { text-align: left; }
+.scen-table td.scen-name {
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 0;
+  width: 100%;
+}
+.scen-oname { display: block; }
+.scen-oprob { display: block; font-size: 9px; font-weight: 600; opacity: 0.65; }
 .scen-p { color: var(--text-dim); width: 44px; }
-.scen-u { width: 46px; font-weight: 600; }
+.scen-u { width: 52px; font-weight: 600; }
 .scen-u-lead { color: var(--gold); font-weight: 800; }
 .scen-rare td { opacity: 0.5; }
+.scen-table tbody tr.row-me td { background: #15212e; }
 .scen-table tbody tr + tr td { border-top: 1px solid rgba(255, 255, 255, 0.05); }
 
 .scen-explorer {
