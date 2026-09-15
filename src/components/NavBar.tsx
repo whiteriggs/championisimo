@@ -117,6 +117,7 @@ const NAV_LINKS: { href: string; label: string; icon: keyof typeof ICON }[] = [
   { href: "/resultados", label: "Porra", icon: "resultados" },
   { href: "/apuesta", label: "Apuestas", icon: "apuesta" },
   { href: "/clasificacion", label: "Clasificación", icon: "grupos" },
+  { href: "/probabilidades", label: "Probabilidades", icon: "probabilidades" },
   { href: "/estadisticas", label: "Estadísticas", icon: "estadisticas" },
   { href: "/cronica", label: "Crónica", icon: "cronica" },
   { href: "/reglas", label: "Reglas", icon: "reglas" },
